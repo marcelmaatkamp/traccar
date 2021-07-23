@@ -1,5 +1,5 @@
 /*
- * Copyright 2019 - 2020 Anton Tananaev (anton@traccar.org)
+ * Copyright 2019 - 2021 Anton Tananaev (anton@traccar.org)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -152,6 +152,13 @@ public final class Keys {
      */
     public static final ConfigSuffix<String> PROTOCOL_ALARM_MAP = new ConfigSuffix<>(
             ".alarmMap",
+            Collections.singletonList(KeyType.GLOBAL));
+
+    /**
+     * Indicates whether TAIP protocol should have prefixes for messages.
+     */
+    public static final ConfigSuffix<Boolean> PROTOCOL_PREFIX = new ConfigSuffix<>(
+            ".prefix",
             Collections.singletonList(KeyType.GLOBAL));
 
     /**
@@ -752,6 +759,13 @@ public final class Keys {
             Collections.singletonList(KeyType.GLOBAL));
 
     /**
+     * Telegram notification send location message.
+     */
+    public static final ConfigKey<Boolean> NOTIFICATOR_TELEGRAM_SEND_LOCATION = new ConfigKey<>(
+            "notificator.telegram.sendLocation",
+            Collections.singletonList(KeyType.GLOBAL));
+
+    /**
      * Maximum time period for reports in seconds. Can be useful to prevent users to request unreasonably long reports.
      * By default there is no limit.
      */
@@ -1182,6 +1196,13 @@ public final class Keys {
      */
     public static final ConfigKey<String> WEB_SAME_SITE_COOKIE = new ConfigKey<>(
             "web.sameSiteCookie",
+            Collections.singletonList(KeyType.GLOBAL));
+
+    /**
+     * Enables persisting Jetty session to the database
+     */
+    public static final ConfigKey<Boolean> WEB_PERSIST_SESSION = new ConfigKey<>(
+            "web.persistSession",
             Collections.singletonList(KeyType.GLOBAL));
 
     /**
