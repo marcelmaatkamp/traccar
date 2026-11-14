@@ -775,6 +775,39 @@ paths:
         '404':
           description: Device not found
           content: {}
+  /devices/{id}/icon:
+    post:
+      operationId: postDevicesIdIcon
+      summary: Upload Device icon
+      tags:
+        - Devices
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          image/*:
+            schema:
+              type: string
+              format: binary
+      responses:
+        '200':
+          description: OK
+          content:
+            text/plain:
+              schema:
+                type: string
+              example: icon.png
+        '400':
+          description: Invalid image type or size
+          content: {}
+        '404':
+          description: Device not found
+          content: {}
   /share/device:
     get:
       operationId: getShareDevice
