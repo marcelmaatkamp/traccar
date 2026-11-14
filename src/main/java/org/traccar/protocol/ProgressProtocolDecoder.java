@@ -20,11 +20,11 @@ import io.netty.buffer.ByteBufUtil;
 import io.netty.buffer.Unpooled;
 import io.netty.channel.Channel;
 import org.traccar.BaseProtocolDecoder;
-import org.traccar.DeviceSession;
 import org.traccar.NetworkMessage;
 import org.traccar.Protocol;
 import org.traccar.helper.BitUtil;
 import org.traccar.model.Position;
+import org.traccar.session.DeviceSession;
 
 import java.net.SocketAddress;
 import java.nio.charset.StandardCharsets;
@@ -105,7 +105,7 @@ public class ProgressProtocolDecoder extends BaseProtocolDecoder {
                     position.set(Position.KEY_ARCHIVE, true);
                     int subtype = buf.readUnsignedShortLE();
                     if (subtype == MSG_ALARM) {
-                        position.set(Position.KEY_ALARM, Position.ALARM_GENERAL);
+                        position.addAlarm(Position.ALARM_GENERAL);
                     }
                     if (buf.readUnsignedShortLE() > buf.readableBytes()) {
                         lastIndex += 1;
@@ -120,9 +120,9 @@ public class ProgressProtocolDecoder extends BaseProtocolDecoder {
                 position.setTime(new Date(buf.readUnsignedIntLE() * 1000));
                 position.setLatitude(buf.readIntLE() * 180.0 / 0x7FFFFFFF);
                 position.setLongitude(buf.readIntLE() * 180.0 / 0x7FFFFFFF);
-                position.setSpeed(buf.readUnsignedIntLE() * 0.01);
-                position.setCourse(buf.readUnsignedShortLE() * 0.01);
-                position.setAltitude(buf.readUnsignedShortLE() * 0.01);
+                position.setSpeed(buf.readUnsignedIntLE() / 100.0);
+                position.setCourse(buf.readUnsignedShortLE() / 100.0);
+                position.setAltitude(buf.readUnsignedShortLE() / 100.0);
 
                 int satellites = buf.readUnsignedByte();
                 position.setValid(satellites >= 3);
@@ -151,7 +151,7 @@ public class ProgressProtocolDecoder extends BaseProtocolDecoder {
                 }
 
                 if (type == MSG_ALARM) {
-                    position.set(Position.KEY_ALARM, true);
+                    position.addAlarm(Position.ALARM_GENERAL);
                     byte[] response = {(byte) 0xC9, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
                     channel.writeAndFlush(new NetworkMessage(Unpooled.wrappedBuffer(response), remoteAddress));
                 }

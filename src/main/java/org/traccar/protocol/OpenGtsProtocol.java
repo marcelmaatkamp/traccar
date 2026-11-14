@@ -21,16 +21,20 @@ import io.netty.handler.codec.http.HttpResponseEncoder;
 import org.traccar.BaseProtocol;
 import org.traccar.PipelineBuilder;
 import org.traccar.TrackerServer;
+import org.traccar.config.Config;
+
+import jakarta.inject.Inject;
 
 public class OpenGtsProtocol extends BaseProtocol {
 
-    public OpenGtsProtocol() {
-        addServer(new TrackerServer(false, getName()) {
+    @Inject
+    public OpenGtsProtocol(Config config) {
+        addServer(new TrackerServer(config, getName(), false) {
             @Override
-            protected void addProtocolHandlers(PipelineBuilder pipeline) {
+            protected void addProtocolHandlers(PipelineBuilder pipeline, Config config) {
                 pipeline.addLast(new HttpResponseEncoder());
                 pipeline.addLast(new HttpRequestDecoder());
-                pipeline.addLast(new HttpObjectAggregator(16384));
+                pipeline.addLast(new HttpObjectAggregator(MAX_HTTP_LENGTH));
                 pipeline.addLast(new OpenGtsProtocolDecoder(OpenGtsProtocol.this));
             }
         });

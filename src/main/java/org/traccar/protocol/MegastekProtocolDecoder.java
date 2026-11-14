@@ -1,5 +1,5 @@
 /*
- * Copyright 2013 - 2018 Anton Tananaev (anton@traccar.org)
+ * Copyright 2013 - 2026 Anton Tananaev (anton@traccar.org)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -17,7 +17,6 @@ package org.traccar.protocol;
 
 import io.netty.channel.Channel;
 import org.traccar.BaseProtocolDecoder;
-import org.traccar.DeviceSession;
 import org.traccar.Protocol;
 import org.traccar.helper.DateBuilder;
 import org.traccar.helper.Parser;
@@ -25,8 +24,11 @@ import org.traccar.helper.PatternBuilder;
 import org.traccar.model.CellTower;
 import org.traccar.model.Network;
 import org.traccar.model.Position;
+import org.traccar.model.WifiAccessPoint;
+import org.traccar.session.DeviceSession;
 
 import java.net.SocketAddress;
+import java.util.Locale;
 import java.util.regex.Pattern;
 
 public class MegastekProtocolDecoder extends BaseProtocolDecoder {
@@ -141,6 +143,9 @@ public class MegastekProtocolDecoder extends BaseProtocolDecoder {
 
             beginIndex = endIndex + 2;
             endIndex = sentence.indexOf('*', beginIndex) + 3;
+            if (endIndex < 0) {
+                return null;
+            }
             location = sentence.substring(beginIndex, endIndex);
 
             beginIndex = endIndex + 1;
@@ -158,7 +163,7 @@ public class MegastekProtocolDecoder extends BaseProtocolDecoder {
             Parser parser = new Parser(PATTERN_SIMPLE, status);
             if (parser.matches()) {
 
-                position.set(Position.KEY_ALARM, decodeAlarm(parser.next()));
+                position.addAlarm(decodeAlarm(parser.next()));
 
                 DeviceSession deviceSession = getDeviceSession(channel, remoteAddress, parser.next(), id);
                 if (deviceSession == null) {
@@ -220,7 +225,7 @@ public class MegastekProtocolDecoder extends BaseProtocolDecoder {
                 position.set(Position.PREFIX_ADC + 1, parser.next());
                 position.set(Position.PREFIX_ADC + 2, parser.next());
                 position.set(Position.PREFIX_ADC + 3, parser.next());
-                position.set(Position.KEY_ALARM, decodeAlarm(parser.next()));
+                position.addAlarm(decodeAlarm(parser.next()));
 
             }
         }
@@ -243,18 +248,19 @@ public class MegastekProtocolDecoder extends BaseProtocolDecoder {
             .number("dd,")
             .number("(dd),")                     // satellites
             .number("dd,")
-            .number("(d+.d+),")                  // hdop
+            .number("(d+.d+)?,")                 // hdop
             .number("(d+.d+)?,")                 // speed
             .number("(d+.d+)?,")                 // course
-            .number("(-?d+.d+),")                // altitude
+            .number("(-?d+.d+)?,")               // altitude
             .number("(d+.d+)?,")                 // odometer
-            .number("(d+),")                     // mcc
-            .number("(d+),")                     // mnc
-            .number("(xxxx)?,")                  // lac
+            .number("(d+)?,")                    // mcc
+            .number("(d+)?,")                    // mnc
+            .number("(x+)?,")                    // lac
             .number("(x+)?,")                    // cid
             .number("(d+)?,")                    // gsm
             .groupBegin()
-            .number("([01]{4})?,")               // input
+            .number("(ddd),").optional()         // heart rate
+            .expression("(?:([01]{4})|static|motion)?,") // input
             .number("([01]{4})?,")               // output
             .number("(d+)?,")                    // adc1
             .number("(d+)?,")                    // adc2
@@ -274,10 +280,16 @@ public class MegastekProtocolDecoder extends BaseProtocolDecoder {
             .number("(-?d+.?d*)")                // temperature 2
             .or().text(" ")
             .groupEnd("?").text(",")
+            .groupBegin()
             .number("(d+)?,")                    // rfid
+            .groupBegin()
+            .number("([01])(d)?").optional()     // charge and belt status
             .expression("[^,]*,")
+            .groupEnd("?")
             .number("(d+)?,")                    // battery
-            .expression("([^,]*)")               // alert
+            .expression("([^,]*)[,;]")           // alert
+            .expression("([^,]*)[,;]").optional() // wifi
+            .groupEnd("?")
             .any()
             .compile();
 
@@ -317,20 +329,24 @@ public class MegastekProtocolDecoder extends BaseProtocolDecoder {
             position.set(Position.KEY_ODOMETER, parser.nextDouble(0) * 1000);
         }
 
-        int mcc = parser.nextInt();
-        int mnc = parser.nextInt();
-        Integer lac = parser.nextHexInt();
-        Integer cid = parser.nextHexInt();
-        Integer rssi = parser.nextInt();
-        if (lac != null && cid != null) {
-            CellTower tower = CellTower.from(mcc, mnc, lac, cid);
-            if (rssi != null) {
-                tower.setSignalStrength(rssi);
+        Network network = new Network();
+        if (parser.hasNext(5)) {
+            int mcc = parser.nextInt();
+            int mnc = parser.nextInt();
+            Integer lac = parser.nextHexInt();
+            Integer cid = parser.nextHexInt();
+            Integer rssi = parser.nextInt();
+            if (lac != null && cid != null) {
+                CellTower tower = CellTower.from(mcc, mnc, lac, cid);
+                if (rssi != null) {
+                    tower.setSignalStrength(rssi);
+                }
+                network.addCellTower(tower);
             }
-            position.setNetwork(new Network(tower));
         }
 
-        if (parser.hasNext(5)) {
+        if (parser.hasNext(6)) {
+            position.set(Position.KEY_HEART_RATE, parser.nextInt());
             position.set(Position.KEY_INPUT, parser.nextBinInt(0));
             position.set(Position.KEY_OUTPUT, parser.nextBinInt(0));
             for (int i = 1; i <= 3; i++) {
@@ -355,18 +371,40 @@ public class MegastekProtocolDecoder extends BaseProtocolDecoder {
 
         position.set(Position.KEY_DRIVER_UNIQUE_ID, parser.next());
 
-        String battery = parser.next();
-        if (battery != null) {
-            position.set(Position.KEY_BATTERY, Integer.parseInt(battery));
+        if (parser.hasNext()) {
+            position.set(Position.KEY_CHARGE, parser.nextInt() > 0);
+        }
+        if (parser.hasNext()) {
+            position.set("belt", parser.nextInt());
         }
 
-        position.set(Position.KEY_ALARM, decodeAlarm(parser.next()));
+        if (parser.hasNext()) {
+            position.set(Position.KEY_BATTERY_LEVEL, parser.nextInt());
+        }
+
+        if (parser.hasNext()) {
+            position.addAlarm(decodeAlarm(parser.next()));
+        }
+
+        if (parser.hasNext()) {
+            String[] points = parser.next().split("\\|");
+            for (String point : points) {
+                String[] wifi = point.split(":");
+                String mac = wifi[0].replaceAll("(..)", "$1:");
+                network.addWifiAccessPoint(WifiAccessPoint.from(
+                        mac.substring(0, mac.length() - 1), Integer.parseInt(wifi[1])));
+            }
+        }
+
+        if (network.getCellTowers() != null || network.getWifiAccessPoints() != null) {
+            position.setNetwork(network);
+        }
 
         return position;
     }
 
     private String decodeAlarm(String value) {
-        value = value.toLowerCase();
+        value = value.toLowerCase(Locale.ROOT);
         if (value.startsWith("geo")) {
             if (value.endsWith("in")) {
                 return Position.ALARM_GEOFENCE_ENTER;
@@ -374,33 +412,28 @@ public class MegastekProtocolDecoder extends BaseProtocolDecoder {
                 return Position.ALARM_GEOFENCE_EXIT;
             }
         }
-        switch (value) {
-            case "poweron":
-                return Position.ALARM_POWER_ON;
-            case "poweroff":
-                return Position.ALARM_POWER_ON;
-            case "sos":
-            case "help":
-                return Position.ALARM_SOS;
-            case "over speed":
-            case "overspeed":
-                return Position.ALARM_OVERSPEED;
-            case "lowspeed":
-                return Position.ALARM_LOW_SPEED;
-            case "low battery":
-            case "lowbattery":
-                return Position.ALARM_LOW_BATTERY;
-            case "vib":
-                return Position.ALARM_VIBRATION;
-            case "move in":
-                return Position.ALARM_GEOFENCE_ENTER;
-            case "move out":
-                return Position.ALARM_GEOFENCE_EXIT;
-            case "error":
-                return Position.ALARM_FAULT;
-            default:
-                return null;
-        }
+        return switch (value) {
+            case "pw on", "poweron" -> Position.ALARM_POWER_ON;
+            case "poweroff" -> Position.ALARM_POWER_OFF;
+            case "sos", "help" -> Position.ALARM_SOS;
+            case "over speed", "overspeed" -> Position.ALARM_OVERSPEED;
+            case "lowspeed" -> Position.ALARM_LOW_SPEED;
+            case "low battery", "lowbattery" -> Position.ALARM_LOW_BATTERY;
+            case "low extern voltage" -> Position.ALARM_LOW_POWER;
+            case "gps cut" -> Position.ALARM_GPS_ANTENNA_CUT;
+            case "vib" -> Position.ALARM_VIBRATION;
+            case "move in" -> Position.ALARM_GEOFENCE_ENTER;
+            case "move out" -> Position.ALARM_GEOFENCE_EXIT;
+            case "corner" -> Position.ALARM_CORNERING;
+            case "fatigue" -> Position.ALARM_FATIGUE_DRIVING;
+            case "psd" -> Position.ALARM_POWER_CUT;
+            case "psr" -> Position.ALARM_POWER_RESTORED;
+            case "hit" -> Position.ALARM_VIBRATION;
+            case "belt on", "belton" -> Position.ALARM_LOCK;
+            case "belt off", "beltoff" -> Position.ALARM_UNLOCK;
+            case "error" -> Position.ALARM_FAULT;
+            default -> null;
+        };
     }
 
     @Override

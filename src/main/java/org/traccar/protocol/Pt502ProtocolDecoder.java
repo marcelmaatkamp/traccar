@@ -1,5 +1,5 @@
 /*
- * Copyright 2012 - 2020 Anton Tananaev (anton@traccar.org)
+ * Copyright 2012 - 2026 Anton Tananaev (anton@traccar.org)
  * Copyright 2012 Luis Parada (luis.parada@gmail.com)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -17,17 +17,15 @@
 package org.traccar.protocol;
 
 import io.netty.buffer.ByteBuf;
-import io.netty.buffer.Unpooled;
 import io.netty.channel.Channel;
 import org.traccar.BaseProtocolDecoder;
-import org.traccar.Context;
-import org.traccar.DeviceSession;
 import org.traccar.NetworkMessage;
 import org.traccar.Protocol;
 import org.traccar.helper.DateBuilder;
 import org.traccar.helper.Parser;
 import org.traccar.helper.PatternBuilder;
 import org.traccar.model.Position;
+import org.traccar.session.DeviceSession;
 
 import java.net.SocketAddress;
 import java.nio.charset.StandardCharsets;
@@ -36,8 +34,6 @@ import java.util.regex.Pattern;
 public class Pt502ProtocolDecoder extends BaseProtocolDecoder {
 
     private static final int MAX_CHUNK_SIZE = 960;
-
-    private ByteBuf photo;
 
     public Pt502ProtocolDecoder(Protocol protocol) {
         super(protocol);
@@ -57,8 +53,8 @@ public class Pt502ProtocolDecoder extends BaseProtocolDecoder {
             .number("(d+.d+)?,")                 // course
             .number("(dd)(dd)(dd),,,?")          // date (ddmmyy)
             .expression(".?/")
-            .expression("([01])+,")              // input
-            .expression("([01])+/")              // output
+            .expression("([01]+),")              // input
+            .expression("([01]+)/")              // output
             .expression("([^/]+)?/")             // adc
             .number("(d+)")                      // odometer
             .expression("/([^/]+)?/")            // rfid
@@ -67,28 +63,18 @@ public class Pt502ProtocolDecoder extends BaseProtocolDecoder {
             .compile();
 
     private String decodeAlarm(String value) {
-        switch (value) {
-            case "IN1":
-                return Position.ALARM_SOS;
-            case "GOF":
-                return Position.ALARM_GEOFENCE;
-            case "TOW":
-                return Position.ALARM_TOW;
-            case "HDA":
-                return Position.ALARM_ACCELERATION;
-            case "HDB":
-                return Position.ALARM_BRAKING;
-            case "FDA":
-                return Position.ALARM_FATIGUE_DRIVING;
-            case "SKA":
-                return Position.ALARM_VIBRATION;
-            case "PMA":
-                return Position.ALARM_MOVEMENT;
-            case "CPA":
-                return Position.ALARM_POWER_CUT;
-            default:
-                return null;
-        }
+        return switch (value) {
+            case "IN1" -> Position.ALARM_SOS;
+            case "GOF" -> Position.ALARM_GEOFENCE;
+            case "TOW" -> Position.ALARM_TOW;
+            case "HDA" -> Position.ALARM_ACCELERATION;
+            case "HDB" -> Position.ALARM_BRAKING;
+            case "FDA" -> Position.ALARM_FATIGUE_DRIVING;
+            case "SKA" -> Position.ALARM_VIBRATION;
+            case "PMA" -> Position.ALARM_MOVEMENT;
+            case "CPA" -> Position.ALARM_POWER_CUT;
+            default -> null;
+        };
     }
 
     private Position decodePosition(Channel channel, SocketAddress remoteAddress, String sentence) {
@@ -99,7 +85,7 @@ public class Pt502ProtocolDecoder extends BaseProtocolDecoder {
         }
 
         Position position = new Position(getProtocolName());
-        position.set(Position.KEY_ALARM, decodeAlarm(parser.next()));
+        position.addAlarm(decodeAlarm(parser.next()));
 
         DeviceSession deviceSession = getDeviceSession(channel, remoteAddress, parser.next());
         if (deviceSession == null) {
@@ -119,8 +105,8 @@ public class Pt502ProtocolDecoder extends BaseProtocolDecoder {
         dateBuilder.setDateReverse(parser.nextInt(), parser.nextInt(), parser.nextInt());
         position.setTime(dateBuilder.getDate());
 
-        position.set(Position.KEY_INPUT, parser.next());
-        position.set(Position.KEY_OUTPUT, parser.next());
+        position.set(Position.KEY_INPUT, parser.nextBinInt());
+        position.set(Position.KEY_OUTPUT, parser.nextBinInt());
 
         if (parser.hasNext()) {
             String[] values = parser.next().split(",");
@@ -144,6 +130,7 @@ public class Pt502ProtocolDecoder extends BaseProtocolDecoder {
 
     private void requestPhotoFragment(Channel channel) {
         if (channel != null) {
+            ByteBuf photo = getMediaBuffer();
             int offset = photo.writerIndex();
             int size = Math.min(photo.writableBytes(), MAX_CHUNK_SIZE);
             channel.writeAndFlush(new NetworkMessage("#PHD" + offset + "," + size + "\r\n", channel.remoteAddress()));
@@ -164,9 +151,10 @@ public class Pt502ProtocolDecoder extends BaseProtocolDecoder {
             int dataIndex = buf.indexOf(typeEndIndex + 1, buf.writerIndex(), (byte) ',') + 1;
             buf.readerIndex(dataIndex);
 
+            ByteBuf photo = getMediaBuffer();
             if (photo != null) {
 
-                photo.writeBytes(buf.readSlice(buf.readableBytes()));
+                photo.writeBytes(buf);
 
                 if (photo.writableBytes() > 0) {
 
@@ -175,16 +163,13 @@ public class Pt502ProtocolDecoder extends BaseProtocolDecoder {
                 } else {
 
                     DeviceSession deviceSession = getDeviceSession(channel, remoteAddress);
-                    String uniqueId = Context.getIdentityManager().getById(deviceSession.getDeviceId()).getUniqueId();
 
                     Position position = new Position(getProtocolName());
                     position.setDeviceId(deviceSession.getDeviceId());
 
                     getLastLocation(position, null);
 
-                    position.set(Position.KEY_IMAGE, Context.getMediaManager().writeFile(uniqueId, photo, "jpg"));
-                    photo.release();
-                    photo = null;
+                    position.set(Position.KEY_IMAGE, writeMediaFile(deviceSession.getUniqueId(), "jpg"));
 
                     return position;
 
@@ -197,7 +182,7 @@ public class Pt502ProtocolDecoder extends BaseProtocolDecoder {
             if (type.startsWith("$PHO")) {
                 int size = Integer.parseInt(type.split("-")[0].substring(4));
                 if (size > 0) {
-                    photo = Unpooled.buffer(size);
+                    newMediaBuffer(size);
                     requestPhotoFragment(channel);
                 }
             }

@@ -15,9 +15,9 @@
  */
 package org.traccar.protocol;
 
+import org.traccar.Protocol;
 import org.traccar.StringProtocolEncoder;
 import org.traccar.model.Command;
-import org.traccar.Protocol;
 
 public class XirgoProtocolEncoder extends StringProtocolEncoder {
 
@@ -28,12 +28,11 @@ public class XirgoProtocolEncoder extends StringProtocolEncoder {
     @Override
     protected Object encodeCommand(Command command) {
 
-        switch (command.getType()) {
-            case Command.TYPE_OUTPUT_CONTROL:
-                return String.format("+XT:7005,%d,1", command.getInteger(Command.KEY_DATA) + 1);
-            default:
-                return null;
-        }
+        return switch (command.getType()) {
+            case Command.TYPE_OUTPUT_CONTROL ->
+                    String.format("+XT:7005,%d,1", command.getInteger(Command.KEY_DATA) + 1);
+            default -> null;
+        };
     }
 
 }

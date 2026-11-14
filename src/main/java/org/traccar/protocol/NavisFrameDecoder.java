@@ -18,9 +18,10 @@ package org.traccar.protocol;
 import io.netty.buffer.ByteBuf;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelHandlerContext;
-import java.nio.charset.StandardCharsets;
 import org.traccar.BaseFrameDecoder;
 import org.traccar.BasePipelineFactory;
+
+import java.nio.charset.StandardCharsets;
 
 public class NavisFrameDecoder extends BaseFrameDecoder {
 
@@ -57,17 +58,12 @@ public class NavisFrameDecoder extends BaseFrameDecoder {
                 String type = buf.toString(buf.readerIndex(), 2, StandardCharsets.US_ASCII);
                 switch (type) {
                     // FLEX 1.0
-                    case "~A":
-                        length = flexDataSize  * buf.getByte(buf.readerIndex() + FLEX_HEADER_LENGTH) + 1 + 1;
-                        break;
-                    case "~T":
-                        length = flexDataSize + 4 + 1;
-                        break;
-                    case "~C":
-                        length = flexDataSize + 1;
-                        break;
+                    case "~A" -> length = flexDataSize * buf.getByte(buf.readerIndex() + FLEX_HEADER_LENGTH) + 1 + 1;
+                    case "~T" -> length = flexDataSize + 4 + 1;
+                    case "~C" -> length = flexDataSize + 1;
+
                     // FLEX 2.0 (Extra packages)
-                    case "~E":
+                    case "~E" -> {
                         length++;
                         for (int i = 0; i < buf.getByte(buf.readerIndex() + FLEX_HEADER_LENGTH); i++) {
                             if (buf.readableBytes() > FLEX_HEADER_LENGTH + length + 1) {
@@ -77,12 +73,11 @@ public class NavisFrameDecoder extends BaseFrameDecoder {
                             }
                         }
                         length++;
-                        break;
-                    case "~X":
-                        length = buf.getUnsignedShortLE(buf.readerIndex() + FLEX_HEADER_LENGTH) + 4 + 1;
-                        break;
-                    default:
+                    }
+                    case "~X" -> length = buf.getUnsignedShortLE(buf.readerIndex() + FLEX_HEADER_LENGTH) + 4 + 1;
+                    default -> {
                         return null;
+                    }
                 }
 
                 if (buf.readableBytes() >= FLEX_HEADER_LENGTH + length) {

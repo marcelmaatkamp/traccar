@@ -18,7 +18,6 @@ package org.traccar.protocol;
 import io.netty.channel.Channel;
 import io.netty.channel.socket.DatagramChannel;
 import org.traccar.BaseProtocolDecoder;
-import org.traccar.DeviceSession;
 import org.traccar.NetworkMessage;
 import org.traccar.Protocol;
 import org.traccar.helper.BitUtil;
@@ -26,6 +25,7 @@ import org.traccar.helper.Parser;
 import org.traccar.helper.PatternBuilder;
 import org.traccar.helper.UnitsConverter;
 import org.traccar.model.Position;
+import org.traccar.session.DeviceSession;
 
 import java.net.SocketAddress;
 import java.util.regex.Pattern;
@@ -49,7 +49,7 @@ public class EskyProtocolDecoder extends BaseProtocolDecoder {
             .number("(d+.d+)[+;]")               // speed
             .number("(d+)[+;]")                  // course
             .groupBegin()
-            .text("0x").number("(d+)[+;]")       // input
+            .text("0x").number("(x+)[+;]")       // input
             .number("(d+)[+;]")                  // message type
             .number("(d+)[+;]")                  // odometer
             .groupEnd("?")
@@ -95,7 +95,7 @@ public class EskyProtocolDecoder extends BaseProtocolDecoder {
         }
 
         position.set(Position.PREFIX_ADC + 1, parser.nextInt());
-        position.set(Position.KEY_BATTERY, parser.nextInt() * 0.01);
+        position.set(Position.KEY_BATTERY, parser.nextInt() / 100.0);
 
         int index = sentence.lastIndexOf('+');
         if (index > 0 && channel instanceof DatagramChannel) {

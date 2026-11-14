@@ -1,5 +1,5 @@
 /*
- * Copyright 2019 - 2020 Anton Tananaev (anton@traccar.org)
+ * Copyright 2019 - 2026 Anton Tananaev (anton@traccar.org)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -19,13 +19,13 @@ import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
 import io.netty.channel.Channel;
 import org.traccar.BaseProtocolDecoder;
-import org.traccar.DeviceSession;
 import org.traccar.NetworkMessage;
 import org.traccar.Protocol;
 import org.traccar.helper.BitUtil;
 import org.traccar.helper.Checksum;
 import org.traccar.helper.DateBuilder;
 import org.traccar.model.Position;
+import org.traccar.session.DeviceSession;
 
 import java.net.SocketAddress;
 
@@ -39,7 +39,7 @@ public class BlueProtocolDecoder extends BaseProtocolDecoder {
 
         int value = buf.readUnsignedShort();
         int degrees = value / 100;
-        double minutes = value % 100 + buf.readUnsignedShort() * 0.0001;
+        double minutes = value % 100 + buf.readUnsignedShort() / 10000.0;
         double coordinate = degrees + minutes / 60;
         return negative ? -coordinate : coordinate;
     }
@@ -67,16 +67,12 @@ public class BlueProtocolDecoder extends BaseProtocolDecoder {
     }
 
     private String decodeAlarm(int value) {
-        switch (value) {
-            case 1:
-                return Position.ALARM_SOS;
-            case 8:
-                return Position.ALARM_OVERSPEED;
-            case 19:
-                return Position.ALARM_LOW_POWER;
-            default:
-                return null;
-        }
+        return switch (value) {
+            case 1 -> Position.ALARM_SOS;
+            case 8 -> Position.ALARM_OVERSPEED;
+            case 19 -> Position.ALARM_LOW_POWER;
+            default -> null;
+        };
     }
 
     @Override
@@ -101,7 +97,11 @@ public class BlueProtocolDecoder extends BaseProtocolDecoder {
 
         while (buf.readableBytes() > 1) {
 
-            int frameEnd = buf.readerIndex() + buf.readUnsignedByte();
+            int length = buf.readUnsignedByte();
+            if (length == 0) {
+                return null;
+            }
+            int frameEnd = buf.readerIndex() - 1 + length;
 
             int type = buf.readUnsignedByte();
             int index = buf.readUnsignedByte();
@@ -116,8 +116,8 @@ public class BlueProtocolDecoder extends BaseProtocolDecoder {
                 position.setValid(BitUtil.check(flags, 7));
                 position.setLatitude(readCoordinate(buf, BitUtil.check(flags, 6)));
                 position.setLongitude(readCoordinate(buf, BitUtil.check(flags, 5)));
-                position.setSpeed(buf.readUnsignedShort() + buf.readUnsignedShort() * 0.001);
-                position.setCourse(buf.readUnsignedShort() + buf.readUnsignedByte() * 0.01);
+                position.setSpeed(buf.readUnsignedShort() + buf.readUnsignedShort() / 1000.0);
+                position.setCourse(buf.readUnsignedShort() + buf.readUnsignedByte() / 100.0);
 
                 DateBuilder dateBuilder = new DateBuilder()
                         .setDate(buf.readUnsignedByte(), buf.readUnsignedByte(), buf.readUnsignedByte())
@@ -132,7 +132,7 @@ public class BlueProtocolDecoder extends BaseProtocolDecoder {
                 int status;
 
                 status = buf.readUnsignedByte(); // status 1
-                position.set(Position.KEY_ALARM, BitUtil.check(status, 1) ? Position.ALARM_VIBRATION : null);
+                position.addAlarm(BitUtil.check(status, 1) ? Position.ALARM_VIBRATION : null);
 
                 buf.readUnsignedByte(); // status 2
                 buf.readUnsignedByte(); // status 3
@@ -153,7 +153,7 @@ public class BlueProtocolDecoder extends BaseProtocolDecoder {
 
             } else if (type == 0x81) {
 
-                position.set(Position.KEY_ALARM, decodeAlarm(buf.readUnsignedByte()));
+                position.addAlarm(decodeAlarm(buf.readUnsignedByte()));
 
             } else if (type == 0x84) {
 

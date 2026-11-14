@@ -1,5 +1,5 @@
 /*
- * Copyright 2015 Anton Tananaev (anton@traccar.org)
+ * Copyright 2015 - 2026 Anton Tananaev (anton@traccar.org)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,24 +15,38 @@
  */
 package org.traccar.helper;
 
-import javax.crypto.SecretKeyFactory;
-import javax.crypto.spec.PBEKeySpec;
+import com.google.common.cache.Cache;
+import com.google.common.cache.CacheBuilder;
+import com.google.common.hash.HashCode;
+import com.google.common.hash.HashFunction;
+
 import java.security.NoSuchAlgorithmException;
 import java.security.SecureRandom;
 import java.security.spec.InvalidKeySpecException;
+import java.time.Duration;
+import javax.crypto.SecretKeyFactory;
+import javax.crypto.spec.PBEKeySpec;
 
 public final class Hashing {
 
-    public static final int ITERATIONS = 1000;
-    public static final int SALT_SIZE = 24;
-    public static final int HASH_SIZE = 24;
+    private static final String LEGACY_ALGORITHM = "PBKDF2WithHmacSHA1";
+    private static final int LEGACY_ITERATIONS = 1000;
 
-    private static SecretKeyFactory factory;
+    private static final String ALGORITHM = "PBKDF2WithHmacSHA256";
+    private static final int ITERATIONS = 200000;
+
+    private static final int SALT_SIZE = 24;
+    private static final int HASH_SIZE = 24;
+
+    private static final SecretKeyFactory LEGACY_FACTORY;
+    private static final SecretKeyFactory FACTORY;
+
     static {
         try {
-            factory = SecretKeyFactory.getInstance("PBKDF2WithHmacSHA1");
+            LEGACY_FACTORY = SecretKeyFactory.getInstance(LEGACY_ALGORITHM);
+            FACTORY = SecretKeyFactory.getInstance(ALGORITHM);
         } catch (NoSuchAlgorithmException e) {
-            e.printStackTrace();
+            throw new ExceptionInInitializerError(e);
         }
     }
 
@@ -55,12 +69,11 @@ public final class Hashing {
         }
     }
 
-    private Hashing() {
-    }
+    private Hashing() {}
 
-    private static byte[] function(char[] password, byte[] salt) {
+    private static byte[] function(SecretKeyFactory factory, char[] password, byte[] salt, int iterations) {
         try {
-            PBEKeySpec spec = new PBEKeySpec(password, salt, ITERATIONS, HASH_SIZE * Byte.SIZE);
+            PBEKeySpec spec = new PBEKeySpec(password, salt, iterations, HASH_SIZE * Byte.SIZE);
             return factory.generateSecret(spec).getEncoded();
         } catch (InvalidKeySpecException e) {
             throw new SecurityException(e);
@@ -68,20 +81,52 @@ public final class Hashing {
     }
 
     private static final SecureRandom RANDOM = new SecureRandom();
+    private static final HashFunction CACHE_HASH = com.google.common.hash.Hashing.hmacSha256(RANDOM.generateSeed(32));
+    private static final Cache<HashCode, Boolean> PASSWORD_CACHE = CacheBuilder.newBuilder()
+            .maximumSize(128)
+            .expireAfterWrite(Duration.ofMinutes(15))
+            .build();
 
     public static HashingResult createHash(String password) {
         byte[] salt = new byte[SALT_SIZE];
         RANDOM.nextBytes(salt);
-        byte[] hash = function(password.toCharArray(), salt);
-        return new HashingResult(
-                DataConverter.printHex(hash),
-                DataConverter.printHex(salt));
+        byte[] hash = function(FACTORY, password.toCharArray(), salt, ITERATIONS);
+        String hashedPassword = ALGORITHM + "$" + ITERATIONS + "$" + DataConverter.printHex(hash);
+        return new HashingResult(hashedPassword, DataConverter.printHex(salt));
     }
 
-    public static boolean validatePassword(String password, String hashHex, String saltHex) {
-        byte[] hash = DataConverter.parseHex(hashHex);
+    public static boolean validatePassword(String password, String hashedPasswordField, String saltHex) {
+        HashCode cacheKey = CACHE_HASH.newHasher()
+                .putInt(password.length()).putUnencodedChars(password)
+                .putInt(hashedPasswordField.length()).putUnencodedChars(hashedPasswordField)
+                .putUnencodedChars(saltHex)
+                .hash();
+        if (PASSWORD_CACHE.getIfPresent(cacheKey) != null) {
+            return true;
+        }
+
         byte[] salt = DataConverter.parseHex(saltHex);
-        return slowEquals(hash, function(password.toCharArray(), salt));
+
+        SecretKeyFactory factory;
+        int iterations;
+        String hashHex;
+        String[] parts = hashedPasswordField.split("\\$");
+        if (parts.length > 1) {
+            factory = FACTORY;
+            iterations = Integer.parseInt(parts[1]);
+            hashHex = parts[2];
+        } else {
+            factory = LEGACY_FACTORY;
+            iterations = LEGACY_ITERATIONS;
+            hashHex = parts[0];
+        }
+
+        byte[] hash = DataConverter.parseHex(hashHex);
+        boolean valid = slowEquals(hash, function(factory, password.toCharArray(), salt, iterations));
+        if (valid) {
+            PASSWORD_CACHE.put(cacheKey, true);
+        }
+        return valid;
     }
 
     /**

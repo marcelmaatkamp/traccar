@@ -19,13 +19,13 @@ import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
 import io.netty.channel.Channel;
 import org.traccar.BaseProtocolDecoder;
-import org.traccar.DeviceSession;
 import org.traccar.Protocol;
 import org.traccar.helper.BcdUtil;
 import org.traccar.helper.BitUtil;
 import org.traccar.helper.DataConverter;
 import org.traccar.helper.DateBuilder;
 import org.traccar.model.Position;
+import org.traccar.session.DeviceSession;
 
 import java.net.SocketAddress;
 
@@ -61,13 +61,13 @@ public class MotorProtocolDecoder extends BaseProtocolDecoder {
         int flags = buf.readUnsignedByte();
         position.setValid(BitUtil.check(flags, 7));
         if (BitUtil.check(flags, 0)) {
-            position.set(Position.KEY_ALARM, Position.ALARM_GENERAL);
+            position.addAlarm(Position.ALARM_GENERAL);
         }
 
-        position.setLatitude(BcdUtil.readInteger(buf, 2) + BcdUtil.readInteger(buf, 6) * 0.0001 / 60);
-        position.setLongitude(BcdUtil.readInteger(buf, 4) + BcdUtil.readInteger(buf, 6) * 0.0001 / 60);
-        position.setSpeed(BcdUtil.readInteger(buf, 4) * 0.1);
-        position.setCourse(BcdUtil.readInteger(buf, 4) * 0.1);
+        position.setLatitude(BcdUtil.readInteger(buf, 2) + BcdUtil.readInteger(buf, 6) / 10000.0 / 60);
+        position.setLongitude(BcdUtil.readInteger(buf, 4) + BcdUtil.readInteger(buf, 6) / 10000.0 / 60);
+        position.setSpeed(BcdUtil.readInteger(buf, 4) / 10.0);
+        position.setCourse(BcdUtil.readInteger(buf, 4) / 10.0);
 
         position.setTime(new DateBuilder()
                 .setYear(BcdUtil.readInteger(buf, 2))

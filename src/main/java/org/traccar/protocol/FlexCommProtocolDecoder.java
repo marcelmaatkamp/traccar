@@ -17,7 +17,6 @@ package org.traccar.protocol;
 
 import io.netty.channel.Channel;
 import org.traccar.BaseProtocolDecoder;
-import org.traccar.DeviceSession;
 import org.traccar.NetworkMessage;
 import org.traccar.Protocol;
 import org.traccar.helper.Parser;
@@ -26,6 +25,7 @@ import org.traccar.helper.UnitsConverter;
 import org.traccar.model.CellTower;
 import org.traccar.model.Network;
 import org.traccar.model.Position;
+import org.traccar.session.DeviceSession;
 
 import java.net.SocketAddress;
 import java.util.regex.Pattern;
@@ -113,10 +113,10 @@ public class FlexCommProtocolDecoder extends BaseProtocolDecoder {
             position.set(Position.PREFIX_OUT + i, parser.nextInt());
         }
 
-        position.set(Position.KEY_FUEL_LEVEL, parser.nextInt());
+        position.set(Position.KEY_FUEL, parser.nextInt());
         position.set(Position.PREFIX_TEMP + 1, parseSignedValue(parser, 0));
         position.set(Position.KEY_BATTERY_LEVEL, parser.nextInt());
-        position.set(Position.KEY_POWER, parser.nextInt() * 0.1);
+        position.set(Position.KEY_POWER, parser.nextInt() / 10.0);
 
         if (channel != null) {
             channel.writeAndFlush(new NetworkMessage("{01}", remoteAddress));

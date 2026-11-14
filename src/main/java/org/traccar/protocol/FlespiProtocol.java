@@ -21,16 +21,20 @@ import io.netty.handler.codec.http.HttpResponseEncoder;
 import org.traccar.BaseProtocol;
 import org.traccar.PipelineBuilder;
 import org.traccar.TrackerServer;
+import org.traccar.config.Config;
+
+import jakarta.inject.Inject;
 
 public class FlespiProtocol extends BaseProtocol {
 
-    public FlespiProtocol() {
-        addServer(new TrackerServer(false, getName()) {
+    @Inject
+    public FlespiProtocol(Config config) {
+        addServer(new TrackerServer(config, getName(), false) {
             @Override
-            protected void addProtocolHandlers(PipelineBuilder pipeline) {
+            protected void addProtocolHandlers(PipelineBuilder pipeline, Config config) {
                 pipeline.addLast(new HttpResponseEncoder());
                 pipeline.addLast(new HttpRequestDecoder(4096, 8192, 128 * 1024));
-                pipeline.addLast(new HttpObjectAggregator(Integer.MAX_VALUE));
+                pipeline.addLast(new HttpObjectAggregator(MAX_HTTP_LENGTH_LARGE));
                 pipeline.addLast(new FlespiProtocolDecoder(FlespiProtocol.this));
             }
         });

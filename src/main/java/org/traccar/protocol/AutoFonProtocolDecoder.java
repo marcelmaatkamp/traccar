@@ -21,7 +21,6 @@ import io.netty.buffer.ByteBufUtil;
 import io.netty.buffer.Unpooled;
 import io.netty.channel.Channel;
 import org.traccar.BaseProtocolDecoder;
-import org.traccar.DeviceSession;
 import org.traccar.NetworkMessage;
 import org.traccar.Protocol;
 import org.traccar.helper.BitUtil;
@@ -29,6 +28,7 @@ import org.traccar.helper.DateBuilder;
 import org.traccar.model.CellTower;
 import org.traccar.model.Network;
 import org.traccar.model.Position;
+import org.traccar.session.DeviceSession;
 
 import java.net.SocketAddress;
 import java.nio.charset.StandardCharsets;
@@ -174,7 +174,7 @@ public class AutoFonProtocolDecoder extends BaseProtocolDecoder {
 
             short status = buf.readUnsignedByte();
             if (BitUtil.check(status, 7)) {
-                position.set(Position.KEY_ALARM, Position.ALARM_GENERAL);
+                position.addAlarm(Position.ALARM_GENERAL);
             }
             position.set(Position.KEY_BATTERY, BitUtil.to(status, 7));
 

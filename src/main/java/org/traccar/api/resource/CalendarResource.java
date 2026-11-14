@@ -1,5 +1,5 @@
 /*
- * Copyright 2016 - 2017 Anton Tananaev (anton@traccar.org)
+ * Copyright 2016 - 2026 Anton Tananaev (anton@traccar.org)
  * Copyright 2016 - 2017 Andrey Kunitsyn (andrey@traccar.org)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -16,13 +16,14 @@
  */
 package org.traccar.api.resource;
 
-import javax.ws.rs.Consumes;
-import javax.ws.rs.Path;
-import javax.ws.rs.Produces;
-import javax.ws.rs.core.MediaType;
-
 import org.traccar.api.SimpleObjectResource;
 import org.traccar.model.Calendar;
+
+import jakarta.ws.rs.Consumes;
+import jakarta.ws.rs.Path;
+import jakarta.ws.rs.Produces;
+import jakarta.ws.rs.core.MediaType;
+import java.util.List;
 
 @Path("calendars")
 @Produces(MediaType.APPLICATION_JSON)
@@ -30,7 +31,7 @@ import org.traccar.model.Calendar;
 public class CalendarResource extends SimpleObjectResource<Calendar> {
 
     public CalendarResource() {
-        super(Calendar.class);
+        super(Calendar.class, "name", List.of("name"));
     }
 
 }

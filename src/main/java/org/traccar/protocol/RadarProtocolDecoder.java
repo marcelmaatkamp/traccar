@@ -18,11 +18,11 @@ package org.traccar.protocol;
 import io.netty.buffer.ByteBuf;
 import io.netty.channel.Channel;
 import org.traccar.BaseProtocolDecoder;
-import org.traccar.DeviceSession;
 import org.traccar.Protocol;
 import org.traccar.helper.BitUtil;
 import org.traccar.helper.UnitsConverter;
 import org.traccar.model.Position;
+import org.traccar.session.DeviceSession;
 
 import java.net.SocketAddress;
 import java.util.BitSet;
@@ -96,7 +96,7 @@ public class RadarProtocolDecoder extends BaseProtocolDecoder {
                     position.setSpeed(UnitsConverter.knotsFromKph(buf.readUnsignedShort()));
                 }
                 if (mask.get(5)) {
-                    position.setCourse(buf.readUnsignedShort() * 0.1);
+                    position.setCourse(buf.readUnsignedShort() / 10.0);
                 }
                 if (mask.get(6)) {
                     position.setAltitude(buf.readShort());

@@ -20,12 +20,13 @@ import io.netty.buffer.ByteBufUtil;
 import io.netty.buffer.Unpooled;
 import io.netty.channel.Channel;
 import org.traccar.BaseProtocolDecoder;
-import org.traccar.DeviceSession;
 import org.traccar.NetworkMessage;
 import org.traccar.Protocol;
 import org.traccar.helper.BitUtil;
+import org.traccar.helper.StringUtil;
 import org.traccar.helper.UnitsConverter;
 import org.traccar.model.Position;
+import org.traccar.session.DeviceSession;
 
 import java.net.SocketAddress;
 import java.nio.charset.StandardCharsets;
@@ -77,10 +78,10 @@ public class CalAmpProtocolDecoder extends BaseProtocolDecoder {
         if (type != MSG_MINI_EVENT_REPORT) {
             buf.readUnsignedInt(); // fix time
         }
-        position.setLatitude(buf.readInt() * 0.0000001);
-        position.setLongitude(buf.readInt() * 0.0000001);
+        position.setLatitude(buf.readInt() / 10000000.0);
+        position.setLongitude(buf.readInt() / 10000000.0);
         if (type != MSG_MINI_EVENT_REPORT) {
-            position.setAltitude(buf.readInt() * 0.01);
+            position.setAltitude(buf.readInt() / 100.0);
             position.setSpeed(UnitsConverter.knotsFromCps(buf.readUnsignedInt()));
         }
         position.setCourse(buf.readShort());
@@ -166,7 +167,8 @@ public class CalAmpProtocolDecoder extends BaseProtocolDecoder {
             int content = buf.readUnsignedByte();
 
             if (BitUtil.check(content, 0)) {
-                String id = ByteBufUtil.hexDump(buf.readSlice(buf.readUnsignedByte())).replace("f", "");
+                String id = StringUtil.stripTrailing(
+                        'f', ByteBufUtil.hexDump(buf.readSlice(buf.readUnsignedByte())));
                 getDeviceSession(channel, remoteAddress, id);
             }
 

@@ -18,12 +18,12 @@ package org.traccar.protocol;
 import io.netty.buffer.ByteBuf;
 import io.netty.channel.Channel;
 import org.traccar.BaseProtocolDecoder;
-import org.traccar.DeviceSession;
 import org.traccar.Protocol;
 import org.traccar.helper.DateBuilder;
 import org.traccar.helper.Parser;
 import org.traccar.helper.PatternBuilder;
 import org.traccar.model.Position;
+import org.traccar.session.DeviceSession;
 
 import java.net.SocketAddress;
 import java.nio.charset.StandardCharsets;
@@ -82,8 +82,8 @@ public class ArnaviTextProtocolDecoder extends BaseProtocolDecoder {
         position.setDeviceId(deviceSession.getDeviceId());
 
         position.set(Position.KEY_INDEX, parser.nextInt());
-        position.set(Position.KEY_POWER, parser.nextInt() * 0.01);
-        position.set(Position.KEY_BATTERY, parser.nextInt() * 0.01);
+        position.set(Position.KEY_POWER, parser.nextInt() / 100.0);
+        position.set(Position.KEY_BATTERY, parser.nextInt() / 100.0);
         position.set(Position.KEY_IGNITION, parser.nextInt() == 1);
         position.set(Position.KEY_INPUT, parser.nextInt());
         position.set(Position.KEY_SATELLITES, parser.nextInt());

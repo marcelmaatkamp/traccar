@@ -1,5 +1,5 @@
 /*
- * Copyright 2018 - 2020 Anton Tananaev (anton@traccar.org)
+ * Copyright 2018 - 2026 Anton Tananaev (anton@traccar.org)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -54,6 +54,7 @@ public abstract class WindowsService {
 
         File jar = new File(WindowsService.class.getProtectionDomain().getCodeSource().getLocation().toURI());
         String command = javaBinary
+                + " -XX:+ExitOnOutOfMemoryError"
                 + " -Duser.dir=\"" + jar.getParentFile().getAbsolutePath() + "\""
                 + " -jar \"" + jar.getAbsolutePath() + "\""
                 + " --service \"" + config + "\"";
@@ -170,7 +171,7 @@ public abstract class WindowsService {
 
     public abstract void run();
 
-    private class ServiceMain implements SERVICE_MAIN_FUNCTION {
+    private final class ServiceMain implements SERVICE_MAIN_FUNCTION {
 
         public void callback(int dwArgc, Pointer lpszArgv) {
             ServiceControl serviceControl = new ServiceControl();
@@ -188,7 +189,7 @@ public abstract class WindowsService {
                     waitObject.wait();
                 }
             } catch (InterruptedException e) {
-                e.printStackTrace();
+                Thread.currentThread().interrupt();
             }
 
             reportStatus(Winsvc.SERVICE_STOPPED, WinError.NO_ERROR, 0);
@@ -203,19 +204,14 @@ public abstract class WindowsService {
 
     }
 
-    private class ServiceControl implements HandlerEx {
+    private final class ServiceControl implements HandlerEx {
 
         public int callback(int dwControl, int dwEventType, Pointer lpEventData, Pointer lpContext) {
-            switch (dwControl) {
-                case Winsvc.SERVICE_CONTROL_STOP:
-                case Winsvc.SERVICE_CONTROL_SHUTDOWN:
-                    reportStatus(Winsvc.SERVICE_STOP_PENDING, WinError.NO_ERROR, 5000);
-                    synchronized (waitObject) {
-                        waitObject.notifyAll();
-                    }
-                    break;
-                default:
-                    break;
+            if (dwControl == Winsvc.SERVICE_CONTROL_STOP || dwControl == Winsvc.SERVICE_CONTROL_SHUTDOWN) {
+                reportStatus(Winsvc.SERVICE_STOP_PENDING, WinError.NO_ERROR, 5000);
+                synchronized (waitObject) {
+                    waitObject.notifyAll();
+                }
             }
             return WinError.NO_ERROR;
         }

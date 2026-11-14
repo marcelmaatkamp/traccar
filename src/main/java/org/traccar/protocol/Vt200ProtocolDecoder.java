@@ -19,17 +19,17 @@ import io.netty.buffer.ByteBuf;
 import io.netty.buffer.ByteBufUtil;
 import io.netty.channel.Channel;
 import org.traccar.BaseProtocolDecoder;
-import org.traccar.DeviceSession;
 import org.traccar.Protocol;
 import org.traccar.helper.BcdUtil;
 import org.traccar.helper.BitUtil;
 import org.traccar.helper.DateBuilder;
 import org.traccar.helper.UnitsConverter;
 import org.traccar.model.Position;
+import org.traccar.session.DeviceSession;
 
 import java.net.SocketAddress;
-import java.util.Arrays;
 import java.util.Date;
+import java.util.List;
 
 public class Vt200ProtocolDecoder extends BaseProtocolDecoder {
 
@@ -40,7 +40,7 @@ public class Vt200ProtocolDecoder extends BaseProtocolDecoder {
     private static double decodeCoordinate(int value) {
         int degrees = value / 1000000;
         int minutes = value % 1000000;
-        return degrees + minutes * 0.0001 / 60;
+        return degrees + minutes / 10000.0 / 60;
     }
 
     protected Date decodeDate(ByteBuf buf) {
@@ -67,37 +67,46 @@ public class Vt200ProtocolDecoder extends BaseProtocolDecoder {
         int type = buf.readUnsignedShort();
         buf.readUnsignedShort(); // length
 
-        if (type == 0x2086 || type == 0x2084 || type == 0x2082) {
+        if (type == 0x2086 || type == 0x2084 || type == 0x2082 || type == 0x3089) {
 
             Position position = new Position(getProtocolName());
             position.setDeviceId(deviceSession.getDeviceId());
 
-            buf.readUnsignedByte(); // data type
+            if (type == 0x3089) {
+                position.set(Position.KEY_IGNITION, buf.readUnsignedByte() == 1);
+            } else {
+                buf.readUnsignedByte(); // data type
+            }
+
             buf.readUnsignedShort(); // trip id
 
             position.setTime(decodeDate(buf));
 
-            position.setLatitude(decodeCoordinate(BcdUtil.readInteger(buf, 8)));
-            position.setLongitude(decodeCoordinate(BcdUtil.readInteger(buf, 9)));
+            if (buf.readableBytes() > 2) {
+                position.setLatitude(decodeCoordinate(BcdUtil.readInteger(buf, 8)));
+                position.setLongitude(decodeCoordinate(BcdUtil.readInteger(buf, 9)));
 
-            int flags = buf.readUnsignedByte();
-            position.setValid(BitUtil.check(flags, 0));
-            if (!BitUtil.check(flags, 1)) {
-                position.setLatitude(-position.getLatitude());
+                int flags = buf.readUnsignedByte();
+                position.setValid(BitUtil.check(flags, 0));
+                if (!BitUtil.check(flags, 1)) {
+                    position.setLatitude(-position.getLatitude());
+                }
+                if (!BitUtil.check(flags, 2)) {
+                    position.setLongitude(-position.getLongitude());
+                }
             }
-            if (!BitUtil.check(flags, 2)) {
-                position.setLongitude(-position.getLongitude());
+
+            if (type != 0x3089) {
+                position.setSpeed(UnitsConverter.knotsFromKph(buf.readUnsignedByte()));
+                position.setCourse(buf.readUnsignedByte() * 2);
+
+                position.set(Position.KEY_SATELLITES, buf.readUnsignedByte());
+                position.set(Position.KEY_RSSI, buf.readUnsignedByte());
+                position.set(Position.KEY_ODOMETER, buf.readUnsignedInt() * 1000);
+                position.set(Position.KEY_STATUS, buf.readUnsignedInt());
+
+                // additional data
             }
-
-            position.setSpeed(UnitsConverter.knotsFromKph(buf.readUnsignedByte()));
-            position.setCourse(buf.readUnsignedByte() * 2);
-
-            position.set(Position.KEY_SATELLITES, buf.readUnsignedByte());
-            position.set(Position.KEY_RSSI, buf.readUnsignedByte());
-            position.set(Position.KEY_ODOMETER, buf.readUnsignedInt() * 1000);
-            position.set(Position.KEY_STATUS, buf.readUnsignedInt());
-
-            // additional data
 
             return position;
 
@@ -114,7 +123,7 @@ public class Vt200ProtocolDecoder extends BaseProtocolDecoder {
 
             position.set("tripStart", decodeDate(buf).getTime());
             position.set("tripEnd", decodeDate(buf).getTime());
-            position.set("drivingTime", buf.readUnsignedShort());
+            position.set(Position.KEY_DRIVING_TIME, buf.readUnsignedShort());
 
             position.set(Position.KEY_FUEL_CONSUMPTION, buf.readUnsignedInt());
             position.set(Position.KEY_ODOMETER_TRIP, buf.readUnsignedInt());
@@ -125,7 +134,7 @@ public class Vt200ProtocolDecoder extends BaseProtocolDecoder {
             position.set("hardAccelerationCount", buf.readUnsignedByte());
             position.set("hardBrakingCount", buf.readUnsignedByte());
 
-            for (String speedType : Arrays.asList("over", "high", "normal", "low")) {
+            for (String speedType : List.of("over", "high", "normal", "low")) {
                 position.set(speedType + "SpeedTime", buf.readUnsignedShort());
                 position.set(speedType + "SpeedDistance", buf.readUnsignedInt());
                 position.set(speedType + "SpeedFuel", buf.readUnsignedInt());

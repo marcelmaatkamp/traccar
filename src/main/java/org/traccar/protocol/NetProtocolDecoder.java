@@ -17,12 +17,12 @@ package org.traccar.protocol;
 
 import io.netty.channel.Channel;
 import org.traccar.BaseProtocolDecoder;
-import org.traccar.DeviceSession;
 import org.traccar.Protocol;
 import org.traccar.helper.BitUtil;
 import org.traccar.helper.Parser;
 import org.traccar.helper.PatternBuilder;
 import org.traccar.model.Position;
+import org.traccar.session.DeviceSession;
 
 import java.net.SocketAddress;
 import java.util.regex.Pattern;
@@ -80,7 +80,7 @@ public class NetProtocolDecoder extends BaseProtocolDecoder {
         position.setLongitude(parser.nextCoordinate(Parser.CoordinateFormat.DEG_MIN_MIN) * hemisphereLongitude);
 
         position.set(Position.KEY_STATUS, parser.nextHexLong());
-        position.setSpeed(parser.nextHexInt() * 0.01);
+        position.setSpeed(parser.nextHexInt() / 100.0);
         position.set(Position.KEY_ODOMETER, parser.nextHexInt() * 1852.0 / 16);
         position.setCourse(parser.nextHexInt());
 

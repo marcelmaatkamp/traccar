@@ -20,15 +20,16 @@ import io.netty.buffer.ByteBufUtil;
 import io.netty.buffer.Unpooled;
 import io.netty.channel.Channel;
 import org.traccar.BaseProtocolDecoder;
-import org.traccar.DeviceSession;
 import org.traccar.NetworkMessage;
 import org.traccar.Protocol;
 import org.traccar.helper.BcdUtil;
 import org.traccar.helper.BitUtil;
+import org.traccar.helper.BufferUtil;
 import org.traccar.helper.Checksum;
 import org.traccar.helper.DateBuilder;
 import org.traccar.helper.UnitsConverter;
 import org.traccar.model.Position;
+import org.traccar.session.DeviceSession;
 
 import java.net.SocketAddress;
 import java.nio.charset.StandardCharsets;
@@ -55,12 +56,6 @@ public class NiotProtocolDecoder extends BaseProtocolDecoder {
             response.writeByte(0x0D);
             channel.writeAndFlush(new NetworkMessage(response, remoteAddress));
         }
-    }
-
-    private double readCoordinate(ByteBuf buf) {
-        long value = buf.readUnsignedInt();
-        double result = BitUtil.to(value, 31) / 1800000.0;
-        return BitUtil.check(value, 31) ? -result : result;
     }
 
     @Override
@@ -96,22 +91,16 @@ public class NiotProtocolDecoder extends BaseProtocolDecoder {
                     .setSecond(BcdUtil.readInteger(buf, 2));
             position.setTime(dateBuilder.getDate());
 
-            position.setLatitude(readCoordinate(buf));
-            position.setLongitude(readCoordinate(buf));
+            position.setLatitude(BufferUtil.readSignedMagnitudeInt(buf) / 1800000.0);
+            position.setLongitude(BufferUtil.readSignedMagnitudeInt(buf) / 1800000.0);
             BcdUtil.readInteger(buf, 4); // reserved
             position.setCourse(BcdUtil.readInteger(buf, 4));
 
             int statusX = buf.readUnsignedByte();
             position.setValid(BitUtil.check(statusX, 7));
             switch (BitUtil.between(statusX, 3, 5)) {
-                case 0b10:
-                    position.set(Position.KEY_ALARM, Position.ALARM_POWER_CUT);
-                    break;
-                case 0b01:
-                    position.set(Position.KEY_ALARM, Position.ALARM_LOW_POWER);
-                    break;
-                default:
-                    break;
+                case 0b10 -> position.addAlarm(Position.ALARM_POWER_CUT);
+                case 0b01 -> position.addAlarm(Position.ALARM_LOW_POWER);
             }
 
             position.set(Position.KEY_ODOMETER, buf.readUnsignedInt());
@@ -119,14 +108,14 @@ public class NiotProtocolDecoder extends BaseProtocolDecoder {
             int statusA = buf.readUnsignedByte();
             position.set(Position.KEY_IGNITION, !BitUtil.check(statusA, 7));
             if (!BitUtil.check(statusA, 6)) {
-                position.set(Position.KEY_ALARM, Position.ALARM_OVERSPEED);
+                position.addAlarm(Position.ALARM_OVERSPEED);
             }
 
             buf.readUnsignedByte(); // statusB
             buf.readUnsignedByte(); // statusC
             position.set(Position.KEY_SATELLITES, buf.readUnsignedByte());
-            position.set(Position.KEY_BATTERY, buf.readUnsignedByte() * 0.1);
-            position.set(Position.KEY_POWER, buf.readUnsignedShort() * 0.1);
+            position.set(Position.KEY_BATTERY, buf.readUnsignedByte() / 10.0);
+            position.set(Position.KEY_POWER, buf.readUnsignedShort() / 10.0);
             buf.readUnsignedByte(); // speed limit
             position.setSpeed(UnitsConverter.knotsFromKph(buf.readUnsignedByte()));
             buf.readUnsignedByte(); // sensor speed
@@ -143,8 +132,8 @@ public class NiotProtocolDecoder extends BaseProtocolDecoder {
                         break;
                     case 0x0002:
                         int statusD = buf.readUnsignedByte();
-                        position.set(Position.KEY_ALARM, BitUtil.check(statusD, 5) ? Position.ALARM_REMOVING : null);
-                        position.set(Position.KEY_ALARM, BitUtil.check(statusD, 4) ? Position.ALARM_TAMPERING : null);
+                        position.addAlarm(BitUtil.check(statusD, 5) ? Position.ALARM_REMOVING : null);
+                        position.addAlarm(BitUtil.check(statusD, 4) ? Position.ALARM_TAMPERING : null);
                         buf.readUnsignedByte(); // run mode
                         buf.readUnsignedByte(); // reserved
                         break;

@@ -47,13 +47,12 @@ public class WrapperInboundHandler implements ChannelInboundHandler {
 
     @Override
     public void channelInactive(ChannelHandlerContext ctx) throws Exception {
-        handler.channelInactive(ctx);
+        handler.channelInactive(new WrapperContext(ctx, ctx.channel().remoteAddress()));
     }
 
     @Override
     public void channelRead(ChannelHandlerContext ctx, Object msg) throws Exception {
-        if (msg instanceof NetworkMessage) {
-            NetworkMessage nm = (NetworkMessage) msg;
+        if (msg instanceof NetworkMessage nm) {
             handler.channelRead(new WrapperContext(ctx, nm.getRemoteAddress()), nm.getMessage());
         } else {
             handler.channelRead(ctx, msg);
@@ -85,7 +84,6 @@ public class WrapperInboundHandler implements ChannelInboundHandler {
         handler.handlerRemoved(ctx);
     }
 
-    @SuppressWarnings("deprecation")
     @Override
     public void exceptionCaught(ChannelHandlerContext ctx, Throwable cause) throws Exception {
         handler.exceptionCaught(ctx, cause);

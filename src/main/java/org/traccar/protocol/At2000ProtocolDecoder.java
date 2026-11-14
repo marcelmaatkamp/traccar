@@ -19,21 +19,21 @@ import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
 import io.netty.channel.Channel;
 import org.traccar.BaseProtocolDecoder;
-import org.traccar.DeviceSession;
 import org.traccar.NetworkMessage;
 import org.traccar.Protocol;
 import org.traccar.helper.DataConverter;
 import org.traccar.helper.UnitsConverter;
 import org.traccar.model.Position;
+import org.traccar.session.DeviceSession;
 
-import javax.crypto.Cipher;
-import javax.crypto.spec.IvParameterSpec;
-import javax.crypto.spec.SecretKeySpec;
 import java.net.SocketAddress;
 import java.nio.charset.StandardCharsets;
 import java.util.Date;
 import java.util.LinkedList;
 import java.util.List;
+import javax.crypto.Cipher;
+import javax.crypto.spec.IvParameterSpec;
+import javax.crypto.spec.SecretKeySpec;
 
 public class At2000ProtocolDecoder extends BaseProtocolDecoder {
 
@@ -138,9 +138,9 @@ public class At2000ProtocolDecoder extends BaseProtocolDecoder {
                     buf.readUnsignedShortLE(); // operator
 
                     position.set(Position.PREFIX_ADC + 1, buf.readUnsignedShortLE());
-                    position.set(Position.PREFIX_ADC + 1, buf.readUnsignedShortLE());
+                    position.set(Position.PREFIX_ADC + 2, buf.readUnsignedShortLE());
 
-                    position.set(Position.KEY_POWER, buf.readUnsignedShortLE() * 0.001);
+                    position.set(Position.KEY_POWER, buf.readUnsignedShortLE() / 1000.0);
 
                     buf.readUnsignedShortLE(); // cid
                     position.set(Position.KEY_RSSI, buf.readUnsignedByte());

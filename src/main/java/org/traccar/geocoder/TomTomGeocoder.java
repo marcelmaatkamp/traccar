@@ -15,8 +15,10 @@
  */
 package org.traccar.geocoder;
 
-import javax.json.JsonArray;
-import javax.json.JsonObject;
+import jakarta.json.JsonArray;
+import jakarta.json.JsonObject;
+import jakarta.ws.rs.client.Client;
+import java.util.Locale;
 
 public class TomTomGeocoder extends JsonGeocoder {
 
@@ -28,8 +30,8 @@ public class TomTomGeocoder extends JsonGeocoder {
         return url;
     }
 
-    public TomTomGeocoder(String url, String key, int cacheSize, AddressFormat addressFormat) {
-        super(formatUrl(url, key), cacheSize, addressFormat);
+    public TomTomGeocoder(Client client, String url, String key, int cacheSize, AddressFormat addressFormat) {
+        super(client, formatUrl(url, key), cacheSize, addressFormat);
     }
 
     @Override
@@ -58,7 +60,7 @@ public class TomTomGeocoder extends JsonGeocoder {
                     address.setState(location.getString("countrySubdivision"));
                 }
                 if (location.containsKey("country")) {
-                    address.setCountry(location.getString("country").toUpperCase());
+                    address.setCountry(location.getString("country").toUpperCase(Locale.ROOT));
                 }
                 if (location.containsKey("postalCode")) {
                     address.setPostcode(location.getString("postalCode"));

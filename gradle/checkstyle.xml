@@ -8,8 +8,12 @@
     <module name="SuppressWarningsFilter"/>
 
     <module name="SuppressionSingleFilter">
-        <property name="files" value="[/\\]protobuf[/\\]"/>
-        <property name="checks" value=".*"/>
+        <property name="checks" value="LineLength"/>
+        <property name="files" value="[\\/]src[\\/]test[\\/]"/>
+    </module>
+
+    <module name="BeforeExecutionExclusionFileFilter">
+        <property name="fileNamePattern" value="^.*[\\/]protobuf[\\/].*$"/>
     </module>
 
     <!--<property name="fileExtensions" value="java, properties, xml"/>-->
@@ -26,7 +30,7 @@
 
     <!-- Checks for Size Violations.                    -->
     <!-- See http://checkstyle.sf.net/config_sizes.html -->
-    <module name="FileLength"/>
+    <!--<module name="FileLength"/>-->
     <module name="LineLength">
         <property name="max" value="120"/>
     </module>
@@ -54,6 +58,8 @@
     <module name="TreeWalker">
 
         <module name="SuppressWarningsHolder"/>
+        <module name="AnnotationLocation"/>
+        <module name="MissingOverride"/>
 
         <!-- Checks for Naming Conventions.                  -->
         <!-- See http://checkstyle.sf.net/config_naming.html -->
@@ -70,29 +76,67 @@
         <!-- Checks for imports                              -->
         <!-- See http://checkstyle.sf.net/config_import.html -->
         <module name="AvoidStarImport"/>
+        <module name="CustomImportOrder">
+            <property name="customImportOrderRules" value="THIRD_PARTY_PACKAGE, STANDARD_JAVA_PACKAGE, STATIC"/>
+            <property name="standardPackageRegExp" value="^(java|javax|jakarta)\."/>
+            <property name="sortImportsInGroupAlphabetically" value="true"/>
+        </module>
         <module name="IllegalImport"/> <!-- defaults to sun.* packages -->
         <module name="RedundantImport"/>
+        <module name="UnnecessaryFullyQualifiedType"/>
         <module name="UnusedImports"/>
 
         <!-- Checks for Size Violations.                    -->
         <!-- See http://checkstyle.sf.net/config_sizes.html -->
-        <module name="MethodLength">
+        <!--<module name="MethodLength">
             <property name="max" value="200"/>
         </module>
-        <module name="ParameterNumber"/>
+        <module name="ParameterNumber">
+            <property name="tokens" value="METHOD_DEF"/>
+        </module>-->
 
         <!-- Checks for whitespace                               -->
         <!-- See http://checkstyle.sf.net/config_whitespace.html -->
         <module name="EmptyForIteratorPad"/>
+        <module name="EmptyLineSeparator">
+            <property name="tokens" value="IMPORT, STATIC_IMPORT, CLASS_DEF, INTERFACE_DEF, ENUM_DEF,
+                    STATIC_INIT, INSTANCE_INIT, METHOD_DEF, CTOR_DEF, VARIABLE_DEF, RECORD_DEF, COMPACT_CTOR_DEF"/>
+            <property name="allowNoEmptyLineBetweenFields" value="true"/>
+            <property name="allowMultipleEmptyLines" value="false"/>
+            <property name="allowMultipleEmptyLinesInsideClassMembers" value="false"/>
+        </module>
+        <module name="Indentation">
+            <property name="basicOffset" value="4"/>
+            <property name="lineWrappingIndentation" value="8"/>
+        </module>
+        <module name="CommentsIndentation"/>
         <module name="GenericWhitespace"/>
         <module name="MethodParamPad"/>
         <module name="NoWhitespaceAfter"/>
+        <module name="NoLineWrap"/>
         <module name="NoWhitespaceBefore"/>
         <module name="OperatorWrap"/>
+        <module name="SeparatorWrap">
+            <property name="tokens" value="DOT"/>
+            <property name="option" value="nl"/>
+        </module>
+        <module name="SeparatorWrap">
+            <property name="tokens" value="COMMA"/>
+            <property name="option" value="eol"/>
+        </module>
         <module name="ParenPad"/>
         <module name="TypecastParenPad"/>
         <module name="WhitespaceAfter"/>
-        <module name="WhitespaceAround"/>
+        <module name="SingleSpaceSeparator"/>
+        <module name="WhitespaceAround">
+            <property name="allowEmptyConstructors" value="true"/>
+            <property name="allowEmptyMethods" value="true"/>
+            <property name="allowEmptyTypes" value="true"/>
+            <property name="allowEmptyLoops" value="true"/>
+            <property name="allowEmptyLambdas" value="true"/>
+            <property name="allowEmptyCatches" value="true"/>
+            <property name="allowEmptySwitchBlockStatements" value="true"/>
+        </module>
 
         <!-- Modifier Checks                                    -->
         <!-- See http://checkstyle.sf.net/config_modifiers.html -->
@@ -110,19 +154,35 @@
         <!-- Checks for common coding problems               -->
         <!-- See http://checkstyle.sf.net/config_coding.html -->
         <module name="EmptyStatement"/>
+        <module name="AvoidDoubleBraceInitialization"/>
+        <module name="OneStatementPerLine"/>
         <module name="EqualsHashCode"/>
+        <module name="FallThrough"/>
+        <module name="ExpressionOverBlockLambda"/>
         <module name="IllegalInstantiation"/>
-        <module name="InnerAssignment"/>
-        <module name="MissingSwitchDefault"/>
+        <!--<module name="InnerAssignment"/>-->
+        <!--<module name="MissingSwitchDefault"/>-->
         <module name="SimplifyBooleanExpression"/>
         <module name="SimplifyBooleanReturn"/>
+        <module name="StringLiteralEquality"/>
+        <module name="UnnecessaryNullCheckWithInstanceOf"/>
+        <module name="UnusedLocalVariable">
+            <property name="jdkVersion" value="21"/>
+        </module>
+        <module name="UnusedPrivateField">
+            <!-- Jackson accesses annotated fields through reflection. -->
+            <property name="ignoreAnnotationCanonicalNames"
+                      value="java.io.Serial, com.fasterxml.jackson.annotation.JsonProperty"/>
+        </module>
 
         <!-- Checks for class design                         -->
         <!-- See http://checkstyle.sf.net/config_design.html -->
         <module name="FinalClass"/>
         <module name="HideUtilityClassConstructor"/>
         <module name="InterfaceIsType"/>
-        <module name="VisibilityModifier"/>
+        <module name="VisibilityModifier">
+            <property name="protectedAllowed" value="true"/>
+        </module>
 
         <!-- Miscellaneous other checks.                   -->
         <!-- See http://checkstyle.sf.net/config_misc.html -->

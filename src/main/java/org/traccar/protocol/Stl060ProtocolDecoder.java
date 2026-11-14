@@ -17,11 +17,11 @@ package org.traccar.protocol;
 
 import io.netty.channel.Channel;
 import org.traccar.BaseProtocolDecoder;
-import org.traccar.DeviceSession;
 import org.traccar.Protocol;
 import org.traccar.helper.Parser;
 import org.traccar.helper.PatternBuilder;
 import org.traccar.model.Position;
+import org.traccar.session.DeviceSession;
 
 import java.net.SocketAddress;
 import java.util.regex.Pattern;
@@ -96,7 +96,7 @@ public class Stl060ProtocolDecoder extends BaseProtocolDecoder {
             position.set(Position.KEY_ODOMETER, parser.nextInt(0));
             position.set(Position.KEY_IGNITION, parser.nextInt(0) == 1);
             position.set(Position.KEY_INPUT, parser.nextInt(0) + parser.nextInt(0) << 1);
-            position.set(Position.KEY_FUEL_LEVEL, parser.nextInt(0));
+            position.set(Position.KEY_FUEL, parser.nextInt(0));
         }
 
         // New format
@@ -107,7 +107,7 @@ public class Stl060ProtocolDecoder extends BaseProtocolDecoder {
             position.set(Position.KEY_DRIVER_UNIQUE_ID, parser.next());
             position.set(Position.KEY_ODOMETER, parser.nextInt(0));
             position.set(Position.PREFIX_TEMP + 1, parser.nextInt(0));
-            position.set(Position.KEY_FUEL_LEVEL, parser.nextInt(0));
+            position.set(Position.KEY_FUEL, parser.nextInt(0));
             position.set(Position.KEY_ACCELERATION, parser.nextInt(0) == 1);
             position.set(Position.KEY_OUTPUT, parser.nextInt(0) + parser.nextInt(0) << 1);
         }

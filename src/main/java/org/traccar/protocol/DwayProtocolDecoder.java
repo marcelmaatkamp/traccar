@@ -17,13 +17,13 @@ package org.traccar.protocol;
 
 import io.netty.channel.Channel;
 import org.traccar.BaseProtocolDecoder;
-import org.traccar.DeviceSession;
 import org.traccar.NetworkMessage;
 import org.traccar.Protocol;
 import org.traccar.helper.Parser;
 import org.traccar.helper.PatternBuilder;
 import org.traccar.helper.UnitsConverter;
 import org.traccar.model.Position;
+import org.traccar.session.DeviceSession;
 
 import java.net.SocketAddress;
 import java.util.regex.Pattern;
@@ -92,9 +92,9 @@ public class DwayProtocolDecoder extends BaseProtocolDecoder {
         position.set(Position.KEY_INPUT, parser.nextBinInt());
         position.set(Position.KEY_OUTPUT, parser.nextBinInt());
 
-        position.set(Position.KEY_BATTERY, parser.nextInt() * 0.001);
-        position.set(Position.PREFIX_ADC + 1, parser.nextInt() * 0.001);
-        position.set(Position.PREFIX_ADC + 2, parser.nextInt() * 0.001);
+        position.set(Position.KEY_BATTERY, parser.nextInt() / 1000.0);
+        position.set(Position.PREFIX_ADC + 1, parser.nextInt() / 1000.0);
+        position.set(Position.PREFIX_ADC + 2, parser.nextInt() / 1000.0);
         position.set(Position.KEY_DRIVER_UNIQUE_ID, parser.next());
 
         return position;

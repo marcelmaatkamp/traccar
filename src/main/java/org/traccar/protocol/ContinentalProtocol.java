@@ -19,14 +19,18 @@ import io.netty.handler.codec.LengthFieldBasedFrameDecoder;
 import org.traccar.BaseProtocol;
 import org.traccar.PipelineBuilder;
 import org.traccar.TrackerServer;
+import org.traccar.config.Config;
+
+import jakarta.inject.Inject;
 
 public class ContinentalProtocol extends BaseProtocol {
 
-    public ContinentalProtocol() {
-        addServer(new TrackerServer(false, getName()) {
+    @Inject
+    public ContinentalProtocol(Config config) {
+        addServer(new TrackerServer(config, getName(), false) {
             @Override
-            protected void addProtocolHandlers(PipelineBuilder pipeline) {
-                pipeline.addLast(new LengthFieldBasedFrameDecoder(1024, 2, 2, -4, 0));
+            protected void addProtocolHandlers(PipelineBuilder pipeline, Config config) {
+                pipeline.addLast(new LengthFieldBasedFrameDecoder(MAX_FRAME_LENGTH, 2, 2, -4, 0));
                 pipeline.addLast(new ContinentalProtocolDecoder(ContinentalProtocol.this));
             }
         });

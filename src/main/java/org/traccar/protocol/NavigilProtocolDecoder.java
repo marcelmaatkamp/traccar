@@ -19,12 +19,12 @@ import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
 import io.netty.channel.Channel;
 import org.traccar.BaseProtocolDecoder;
-import org.traccar.DeviceSession;
 import org.traccar.NetworkMessage;
 import org.traccar.Protocol;
 import org.traccar.helper.Checksum;
 import org.traccar.helper.UnitsConverter;
 import org.traccar.model.Position;
+import org.traccar.session.DeviceSession;
 
 import java.net.SocketAddress;
 import java.util.Date;
@@ -65,7 +65,8 @@ public class NavigilProtocolDecoder extends BaseProtocolDecoder {
         data.writeShortLE(0); // OK
 
         ByteBuf header = Unpooled.buffer(20);
-        header.writeByte(1); header.writeByte(0);
+        header.writeByte(1);
+        header.writeByte(0);
         header.writeShortLE(senderSequenceNumber++);
         header.writeShortLE(MSG_ACKNOWLEDGEMENT);
         header.writeShortLE(header.capacity() + data.capacity());
@@ -90,8 +91,8 @@ public class NavigilProtocolDecoder extends BaseProtocolDecoder {
         buf.readUnsignedShortLE(); // report trigger
         position.set(Position.KEY_FLAGS, buf.readUnsignedShortLE());
 
-        position.setLatitude(buf.readIntLE() * 0.0000001);
-        position.setLongitude(buf.readIntLE() * 0.0000001);
+        position.setLatitude(buf.readIntLE() / 10000000.0);
+        position.setLongitude(buf.readIntLE() / 10000000.0);
         position.setAltitude(buf.readUnsignedShortLE());
 
         position.set(Position.KEY_SATELLITES, buf.readUnsignedShortLE());
@@ -104,7 +105,7 @@ public class NavigilProtocolDecoder extends BaseProtocolDecoder {
         position.set(Position.KEY_ODOMETER, buf.readUnsignedIntLE());
         position.set(Position.KEY_DISTANCE, buf.readUnsignedIntLE());
 
-        position.set(Position.KEY_BATTERY, buf.readUnsignedShortLE() * 0.001);
+        position.set(Position.KEY_BATTERY, buf.readUnsignedShortLE() / 1000.0);
 
         position.set(Position.KEY_CHARGE, buf.readUnsignedShortLE());
 
@@ -127,8 +128,8 @@ public class NavigilProtocolDecoder extends BaseProtocolDecoder {
 
         position.setTime(convertTimestamp(buf.readUnsignedIntLE()));
 
-        position.setLatitude(buf.readIntLE() * 0.0000001);
-        position.setLongitude(buf.readIntLE() * 0.0000001);
+        position.setLatitude(buf.readIntLE() / 10000000.0);
+        position.setLongitude(buf.readIntLE() / 10000000.0);
         position.setAltitude(buf.readUnsignedShortLE());
 
         position.set(Position.KEY_SATELLITES, buf.readUnsignedByte());
@@ -145,7 +146,7 @@ public class NavigilProtocolDecoder extends BaseProtocolDecoder {
         position.set(Position.PREFIX_IO + 2, buf.readUnsignedShortLE()); // VSAUT2 voltage
         position.set(Position.PREFIX_IO + 3, buf.readUnsignedShortLE()); // solar voltage
 
-        position.set(Position.KEY_BATTERY, buf.readUnsignedShortLE() * 0.001);
+        position.set(Position.KEY_BATTERY, buf.readUnsignedShortLE() / 1000.0);
 
         return position;
     }
@@ -158,8 +159,8 @@ public class NavigilProtocolDecoder extends BaseProtocolDecoder {
         position.setDeviceId(deviceSession.getDeviceId());
         position.setTime(convertTimestamp(timestamp));
 
-        position.setLatitude(buf.readMediumLE() * 0.00002);
-        position.setLongitude(buf.readMediumLE() * 0.00002);
+        position.setLatitude(buf.readMediumLE() / 50000.0);
+        position.setLongitude(buf.readMediumLE() / 50000.0);
 
         position.setSpeed(UnitsConverter.knotsFromKph(buf.readUnsignedByte()));
         position.setCourse(buf.readUnsignedByte() * 2);
@@ -180,8 +181,8 @@ public class NavigilProtocolDecoder extends BaseProtocolDecoder {
         position.setDeviceId(deviceSession.getDeviceId());
         position.setTime(convertTimestamp(timestamp));
 
-        position.setLatitude(buf.readIntLE() * 0.0000001);
-        position.setLongitude(buf.readIntLE() * 0.0000001);
+        position.setLatitude(buf.readIntLE() / 10000000.0);
+        position.setLongitude(buf.readIntLE() / 10000000.0);
 
         buf.readUnsignedByte(); // report trigger
 
@@ -213,15 +214,15 @@ public class NavigilProtocolDecoder extends BaseProtocolDecoder {
 
         position.setTime(convertTimestamp(buf.readUnsignedIntLE()));
 
-        position.setLatitude(buf.readIntLE() * 0.0000001);
-        position.setLongitude(buf.readIntLE() * 0.0000001);
+        position.setLatitude(buf.readIntLE() / 10000000.0);
+        position.setLongitude(buf.readIntLE() / 10000000.0);
         position.setAltitude(buf.readUnsignedShortLE());
 
         position.set(Position.KEY_SATELLITES, buf.readUnsignedByte());
         position.set(Position.KEY_SATELLITES_VISIBLE, buf.readUnsignedByte());
 
         position.setSpeed(buf.readUnsignedShortLE() * 0.194384);
-        position.setCourse(buf.readUnsignedShortLE() * 0.1);
+        position.setCourse(buf.readUnsignedShortLE() / 10.0);
 
         position.set("maximumSpeed", buf.readUnsignedByte());
         position.set("minimumSpeed", buf.readUnsignedByte());
@@ -229,7 +230,7 @@ public class NavigilProtocolDecoder extends BaseProtocolDecoder {
 
         position.set(Position.PREFIX_IO + 1, buf.readUnsignedByte()); // supply voltage 1
         position.set(Position.PREFIX_IO + 2, buf.readUnsignedByte()); // supply voltage 2
-        position.set(Position.KEY_BATTERY, buf.readUnsignedShortLE() * 0.001);
+        position.set(Position.KEY_BATTERY, buf.readUnsignedShortLE() / 1000.0);
 
         return position;
     }
@@ -249,14 +250,14 @@ public class NavigilProtocolDecoder extends BaseProtocolDecoder {
 
         buf.readUnsignedShortLE(); // duration
 
-        position.setLatitude(buf.readIntLE() * 0.0000001);
-        position.setLongitude(buf.readIntLE() * 0.0000001);
+        position.setLatitude(buf.readIntLE() / 10000000.0);
+        position.setLongitude(buf.readIntLE() / 10000000.0);
 
         position.setSpeed(UnitsConverter.knotsFromKph(buf.readUnsignedByte()));
         position.setCourse(buf.readUnsignedByte() * 2.0);
 
         position.set(Position.KEY_SATELLITES, buf.readUnsignedByte());
-        position.set(Position.KEY_BATTERY, buf.readUnsignedShortLE() * 0.001);
+        position.set(Position.KEY_BATTERY, buf.readUnsignedShortLE() / 1000.0);
         position.set(Position.KEY_ODOMETER, buf.readUnsignedIntLE());
 
         return position;
@@ -287,22 +288,15 @@ public class NavigilProtocolDecoder extends BaseProtocolDecoder {
             sendAcknowledgment(channel, sequenceNumber);
         }
 
-        switch (messageId) {
-            case MSG_UNIT_REPORT:
-                return parseUnitReport(deviceSession, buf, sequenceNumber);
-            case MSG_TG2_REPORT:
-                return parseTg2Report(deviceSession, buf, sequenceNumber);
-            case MSG_POSITION_REPORT:
-                return parsePositionReport(deviceSession, buf, sequenceNumber, timestamp);
-            case MSG_POSITION_REPORT_2:
-                return parsePositionReport2(deviceSession, buf, sequenceNumber, timestamp);
-            case MSG_SNAPSHOT4:
-                return parseSnapshot4(deviceSession, buf, sequenceNumber);
-            case MSG_TRACKING_DATA:
-                return parseTrackingData(deviceSession, buf, sequenceNumber, timestamp);
-            default:
-                return null;
-        }
+        return switch (messageId) {
+            case MSG_UNIT_REPORT -> parseUnitReport(deviceSession, buf, sequenceNumber);
+            case MSG_TG2_REPORT -> parseTg2Report(deviceSession, buf, sequenceNumber);
+            case MSG_POSITION_REPORT -> parsePositionReport(deviceSession, buf, sequenceNumber, timestamp);
+            case MSG_POSITION_REPORT_2 -> parsePositionReport2(deviceSession, buf, sequenceNumber, timestamp);
+            case MSG_SNAPSHOT4 -> parseSnapshot4(deviceSession, buf, sequenceNumber);
+            case MSG_TRACKING_DATA -> parseTrackingData(deviceSession, buf, sequenceNumber, timestamp);
+            default -> null;
+        };
     }
 
 }

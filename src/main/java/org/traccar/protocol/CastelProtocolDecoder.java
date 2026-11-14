@@ -1,5 +1,5 @@
 /*
- * Copyright 2015 - 2019 Anton Tananaev (anton@traccar.org)
+ * Copyright 2015 - 2024 Anton Tananaev (anton@traccar.org)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -20,7 +20,6 @@ import io.netty.buffer.ByteBufUtil;
 import io.netty.buffer.Unpooled;
 import io.netty.channel.Channel;
 import org.traccar.BaseProtocolDecoder;
-import org.traccar.DeviceSession;
 import org.traccar.NetworkMessage;
 import org.traccar.Protocol;
 import org.traccar.helper.BitUtil;
@@ -31,6 +30,7 @@ import org.traccar.helper.UnitsConverter;
 import org.traccar.model.CellTower;
 import org.traccar.model.Network;
 import org.traccar.model.Position;
+import org.traccar.session.DeviceSession;
 
 import java.net.SocketAddress;
 import java.nio.charset.StandardCharsets;
@@ -43,35 +43,29 @@ public class CastelProtocolDecoder extends BaseProtocolDecoder {
 
     private static final Map<Integer, Integer> PID_LENGTH_MAP = new HashMap<>();
 
+    private static void addPidLength(int length, int... pids) {
+        for (int pid : pids) {
+            PID_LENGTH_MAP.put(pid, length);
+        }
+    }
+
     static {
-        int[] l1 = {
-            0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0b, 0x0d,
-            0x0e, 0x0f, 0x11, 0x12, 0x13, 0x1c, 0x1d, 0x1e, 0x2c,
-            0x2d, 0x2e, 0x2f, 0x30, 0x33, 0x43, 0x45, 0x46,
-            0x47, 0x48, 0x49, 0x4a, 0x4b, 0x4c, 0x51, 0x52,
-            0x5a
-        };
-        int[] l2 = {
-            0x02, 0x03, 0x0a, 0x0c, 0x10, 0x14, 0x15, 0x16,
-            0x17, 0x18, 0x19, 0x1a, 0x1b, 0x1f, 0x21, 0x22,
-            0x23, 0x31, 0x32, 0x3c, 0x3d, 0x3e, 0x3f, 0x42,
-            0x44, 0x4d, 0x4e, 0x50, 0x53, 0x54, 0x55, 0x56,
-            0x57, 0x58, 0x59
-        };
-        int[] l4 = {
-            0x00, 0x01, 0x20, 0x24, 0x25, 0x26, 0x27, 0x28,
-            0x29, 0x2a, 0x2b, 0x34, 0x35, 0x36, 0x37, 0x38,
-            0x39, 0x3a, 0x3b, 0x40, 0x41, 0x4f
-        };
-        for (int i : l1) {
-            PID_LENGTH_MAP.put(i, 1);
-        }
-        for (int i : l2) {
-            PID_LENGTH_MAP.put(i, 2);
-        }
-        for (int i : l4) {
-            PID_LENGTH_MAP.put(i, 4);
-        }
+        addPidLength(1,
+                0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0b, 0x0d,
+                0x0e, 0x0f, 0x11, 0x12, 0x13, 0x1c, 0x1d, 0x1e, 0x2c,
+                0x2d, 0x2e, 0x2f, 0x30, 0x33, 0x43, 0x45, 0x46,
+                0x47, 0x48, 0x49, 0x4a, 0x4b, 0x4c, 0x51, 0x52,
+                0x5a);
+        addPidLength(2,
+                0x02, 0x03, 0x0a, 0x0c, 0x10, 0x14, 0x15, 0x16,
+                0x17, 0x18, 0x19, 0x1a, 0x1b, 0x1f, 0x21, 0x22,
+                0x23, 0x31, 0x32, 0x3c, 0x3d, 0x3e, 0x3f, 0x42,
+                0x44, 0x4d, 0x4e, 0x50, 0x53, 0x54, 0x55, 0x56,
+                0x57, 0x58, 0x59, 0x9d);
+        addPidLength(4,
+                0x00, 0x01, 0x20, 0x24, 0x25, 0x26, 0x27, 0x28,
+                0x29, 0x2a, 0x2b, 0x34, 0x35, 0x36, 0x37, 0x38,
+                0x39, 0x3a, 0x3b, 0x40, 0x41, 0x4f, 0x67, 0xa6);
     }
 
     public CastelProtocolDecoder(Protocol protocol) {
@@ -91,9 +85,11 @@ public class CastelProtocolDecoder extends BaseProtocolDecoder {
     public static final short MSG_SC_DTCS_PASSENGER = 0x4006;
     public static final short MSG_SC_DTCS_COMMERCIAL = 0x400B;
     public static final short MSG_SC_ALARM = 0x4007;
+    public static final short MSG_SC_ALARM_RESPONSE = (short) 0xC007;
     public static final short MSG_SC_CELL = 0x4008;
     public static final short MSG_SC_GPS_SLEEP = 0x4009;
     public static final short MSG_SC_FUEL = 0x400E;
+    public static final short MSG_SC_COMPREHENSIVE = 0x401F;
     public static final short MSG_SC_AGPS_REQUEST = 0x5101;
     public static final short MSG_SC_QUERY_RESPONSE = (short) 0xA002;
     public static final short MSG_SC_CURRENT_LOCATION = (short) 0xB001;
@@ -117,7 +113,7 @@ public class CastelProtocolDecoder extends BaseProtocolDecoder {
         double lat = buf.readUnsignedIntLE() / 3600000.0;
         double lon = buf.readUnsignedIntLE() / 3600000.0;
         position.setSpeed(UnitsConverter.knotsFromCps(buf.readUnsignedShortLE()));
-        position.setCourse(buf.readUnsignedShortLE() * 0.1);
+        position.setCourse(buf.readUnsignedShortLE() / 10.0);
 
         int flags = buf.readUnsignedByte();
         if ((flags & 0x02) == 0) {
@@ -160,20 +156,15 @@ public class CastelProtocolDecoder extends BaseProtocolDecoder {
 
         for (int i = 0; i < count; i++) {
             int value;
-            switch (PID_LENGTH_MAP.get(pids[i])) {
-                case 1:
-                    value = buf.readUnsignedByte();
-                    break;
-                case 2:
-                    value = buf.readUnsignedShortLE();
-                    break;
-                case 4:
-                    value = buf.readIntLE();
-                    break;
-                default:
-                    value = 0;
-                    break;
+            if (!PID_LENGTH_MAP.containsKey(pids[i])) {
+                throw new RuntimeException(String.format("Unknown PID 0x%02x", pids[i]));
             }
+            value = switch (PID_LENGTH_MAP.get(pids[i])) {
+                case 1 -> buf.readUnsignedByte();
+                case 2 -> buf.readUnsignedShortLE();
+                case 4 -> buf.readIntLE();
+                default -> 0;
+            };
             position.add(ObdDecoder.decodeData(pids[i], value, false));
         }
     }
@@ -188,9 +179,9 @@ public class CastelProtocolDecoder extends BaseProtocolDecoder {
         buf.readUnsignedShortLE(); // current fuel consumption
 
         long state = buf.readUnsignedIntLE();
-        position.set(Position.KEY_ALARM, BitUtil.check(state, 4) ? Position.ALARM_ACCELERATION : null);
-        position.set(Position.KEY_ALARM, BitUtil.check(state, 5) ? Position.ALARM_BRAKING : null);
-        position.set(Position.KEY_ALARM, BitUtil.check(state, 6) ? Position.ALARM_IDLE : null);
+        position.addAlarm(BitUtil.check(state, 4) ? Position.ALARM_ACCELERATION : null);
+        position.addAlarm(BitUtil.check(state, 5) ? Position.ALARM_BRAKING : null);
+        position.addAlarm(BitUtil.check(state, 6) ? Position.ALARM_IDLE : null);
         position.set(Position.KEY_IGNITION, BitUtil.check(state, 2 * 8 + 2));
         position.set(Position.KEY_STATUS, state);
 
@@ -208,7 +199,8 @@ public class CastelProtocolDecoder extends BaseProtocolDecoder {
             }
 
             ByteBuf response = Unpooled.buffer(length);
-            response.writeByte('@'); response.writeByte('@');
+            response.writeByte('@');
+            response.writeByte('@');
             response.writeShortLE(length);
             response.writeByte(version);
             response.writeBytes(id);
@@ -219,7 +211,8 @@ public class CastelProtocolDecoder extends BaseProtocolDecoder {
             }
             response.writeShortLE(
                     Checksum.crc16(Checksum.CRC16_X25, response.nioBuffer(0, response.writerIndex())));
-            response.writeByte(0x0D); response.writeByte(0x0A);
+            response.writeByte(0x0D);
+            response.writeByte(0x0A);
             channel.writeAndFlush(new NetworkMessage(response, remoteAddress));
         }
     }
@@ -231,7 +224,8 @@ public class CastelProtocolDecoder extends BaseProtocolDecoder {
             int length = 2 + 2 + id.readableBytes() + 2 + 4 + 8 + 2 + 2;
 
             ByteBuf response = Unpooled.buffer(length);
-            response.writeByte('@'); response.writeByte('@');
+            response.writeByte('@');
+            response.writeByte('@');
             response.writeShortLE(length);
             response.writeBytes(id);
             response.writeShort(type);
@@ -241,57 +235,32 @@ public class CastelProtocolDecoder extends BaseProtocolDecoder {
             }
             response.writeShortLE(
                     Checksum.crc16(Checksum.CRC16_X25, response.nioBuffer(0, response.writerIndex())));
-            response.writeByte(0x0D); response.writeByte(0x0A);
+            response.writeByte(0x0D);
+            response.writeByte(0x0A);
             channel.writeAndFlush(new NetworkMessage(response, remoteAddress));
         }
     }
 
     private void decodeAlarm(Position position, int alarm) {
         switch (alarm) {
-            case 0x01:
-                position.set(Position.KEY_ALARM, Position.ALARM_OVERSPEED);
-                break;
-            case 0x02:
-                position.set(Position.KEY_ALARM, Position.ALARM_LOW_POWER);
-                break;
-            case 0x03:
-                position.set(Position.KEY_ALARM, Position.ALARM_TEMPERATURE);
-                break;
-            case 0x04:
-                position.set(Position.KEY_ALARM, Position.ALARM_ACCELERATION);
-                break;
-            case 0x05:
-                position.set(Position.KEY_ALARM, Position.ALARM_BRAKING);
-                break;
-            case 0x06:
-                position.set(Position.KEY_ALARM, Position.ALARM_IDLE);
-                break;
-            case 0x07:
-                position.set(Position.KEY_ALARM, Position.ALARM_TOW);
-                break;
-            case 0x08:
-                position.set(Position.KEY_ALARM, Position.ALARM_HIGH_RPM);
-                break;
-            case 0x09:
-                position.set(Position.KEY_ALARM, Position.ALARM_POWER_ON);
-                break;
-            case 0x0B:
-                position.set(Position.KEY_ALARM, Position.ALARM_LANE_CHANGE);
-                break;
-            case 0x0C:
-                position.set(Position.KEY_ALARM, Position.ALARM_CORNERING);
-                break;
-            case 0x0E:
-                position.set(Position.KEY_ALARM, Position.ALARM_POWER_OFF);
-                break;
-            case 0x16:
-                position.set(Position.KEY_IGNITION, true);
-                break;
-            case 0x17:
-                position.set(Position.KEY_IGNITION, false);
-                break;
-            default:
-                break;
+            case 0x01 -> position.addAlarm(Position.ALARM_OVERSPEED);
+            case 0x02 -> position.addAlarm(Position.ALARM_LOW_POWER);
+            case 0x03 -> position.addAlarm(Position.ALARM_TEMPERATURE);
+            case 0x04 -> position.addAlarm(Position.ALARM_ACCELERATION);
+            case 0x05 -> position.addAlarm(Position.ALARM_BRAKING);
+            case 0x06 -> position.addAlarm(Position.ALARM_IDLE);
+            case 0x07 -> position.addAlarm(Position.ALARM_TOW);
+            case 0x08 -> position.addAlarm(Position.ALARM_HIGH_RPM);
+            case 0x09 -> position.addAlarm(Position.ALARM_POWER_ON);
+            case 0x0B -> position.addAlarm(Position.ALARM_LANE_CHANGE);
+            case 0x0C -> position.addAlarm(Position.ALARM_CORNERING);
+            case 0x0D -> position.addAlarm(Position.ALARM_FATIGUE_DRIVING);
+            case 0x0E -> position.addAlarm(Position.ALARM_POWER_OFF);
+            case 0x11 -> position.addAlarm(Position.ALARM_ACCIDENT);
+            case 0x12 -> position.addAlarm(Position.ALARM_TAMPERING);
+            case 0x16 -> position.set(Position.KEY_IGNITION, true);
+            case 0x17 -> position.set(Position.KEY_IGNITION, false);
+            case 0x1C -> position.addAlarm(Position.ALARM_VIBRATION);
         }
     }
 
@@ -299,7 +268,7 @@ public class CastelProtocolDecoder extends BaseProtocolDecoder {
             Channel channel, SocketAddress remoteAddress, ByteBuf buf,
             int version, ByteBuf id, short type, DeviceSession deviceSession) {
 
-        Position position;
+        Position position = null;
         int count;
 
         switch (type) {
@@ -314,18 +283,22 @@ public class CastelProtocolDecoder extends BaseProtocolDecoder {
             case MSG_SC_ALARM:
             case MSG_SC_CURRENT_LOCATION:
             case MSG_SC_FUEL:
+            case MSG_SC_COMPREHENSIVE:
                 if (type == MSG_SC_LOGIN) {
                     ByteBuf response = Unpooled.buffer(10);
                     response.writeIntLE(0xFFFFFFFF);
                     response.writeShortLE(0);
                     response.writeIntLE((int) (System.currentTimeMillis() / 1000));
                     sendResponse(channel, remoteAddress, version, id, MSG_SC_LOGIN_RESPONSE, response);
-                }
-
-                if (type == MSG_SC_GPS) {
+                } else if (type == MSG_SC_GPS || type == MSG_SC_COMPREHENSIVE) {
                     buf.readUnsignedByte(); // historical
+                    if (type == MSG_SC_COMPREHENSIVE) {
+                        buf.readUnsignedIntLE(); // index
+                    }
                 } else if (type == MSG_SC_ALARM) {
-                    buf.readUnsignedIntLE(); // alarm
+                    ByteBuf response = Unpooled.buffer(10);
+                    response.writeIntLE(buf.readIntLE()); // alarm index
+                    sendResponse(channel, remoteAddress, version, id, MSG_SC_ALARM_RESPONSE, response);
                 } else if (type == MSG_SC_CURRENT_LOCATION) {
                     buf.readUnsignedShortLE();
                 }
@@ -356,9 +329,9 @@ public class CastelProtocolDecoder extends BaseProtocolDecoder {
                     int alarmCount = buf.readUnsignedByte();
                     for (int i = 0; i < alarmCount; i++) {
                         if (buf.readUnsignedByte() != 0) {
-                            int alarm = buf.readUnsignedByte();
+                            int event = buf.readUnsignedByte();
                             for (Position p : positions) {
-                                decodeAlarm(p, alarm);
+                                decodeAlarm(p, event);
                             }
                             buf.readUnsignedShortLE(); // description
                             buf.readUnsignedShortLE(); // threshold
@@ -367,6 +340,63 @@ public class CastelProtocolDecoder extends BaseProtocolDecoder {
                 } else if (type == MSG_SC_FUEL) {
                     for (Position p : positions) {
                         p.set(Position.PREFIX_ADC + 1, buf.readUnsignedShortLE());
+                    }
+                } else if (type == MSG_SC_COMPREHENSIVE) {
+                    if (position == null) {
+                        position = new Position(getProtocolName());
+                        position.setDeviceId(deviceSession.getDeviceId());
+                        getLastLocation(position, null);
+                    }
+
+                    while (buf.readableBytes() > 4) {
+                        int tag = buf.readUnsignedShortLE();
+                        int length = buf.readUnsignedShortLE();
+                        switch (tag) {
+                            case 0x0002 -> {
+                                int pidCount = buf.readUnsignedByte();
+                                for (int i = 0; i < pidCount; i++) {
+                                    int pidTag = buf.readUnsignedShortLE();
+                                    int pidLength = buf.readUnsignedShortLE();
+                                    position.set("pid" + pidTag, ByteBufUtil.hexDump(buf.readSlice(pidLength)));
+                                }
+                            }
+                            case 0x0004 -> buf.skipBytes(length); // supported data streams
+                            case 0x0005 -> buf.skipBytes(length); // snapshot data
+                            case 0x0006 -> {
+                                buf.readUnsignedByte(); // fault flag
+                                int faultCount = buf.readUnsignedByte();
+                                for (int i = 1; i <= faultCount; i++) {
+                                    position.set("fault" + i, buf.readUnsignedShortLE());
+                                }
+                            }
+                            case 0x0007 -> {
+                                buf.readUnsignedIntLE(); // alarm index
+                                int alarmCount = buf.readUnsignedByte();
+                                for (int i = 0; i < alarmCount; i++) {
+                                    int alarmFlag = buf.readUnsignedByte();
+                                    int event = buf.readUnsignedByte();
+                                    if (alarmFlag > 0) {
+                                        decodeAlarm(position, event);
+                                    }
+                                    buf.readUnsignedShortLE(); // description
+                                    buf.readUnsignedShortLE(); // threshold
+                                }
+                            }
+                            case 0x000B -> {
+                                buf.readUnsignedByte(); // fault flag
+                                int faultCount = buf.readUnsignedByte();
+                                for (int i = 1; i <= faultCount; i++) {
+                                    position.set("fault" + i, buf.readUnsignedIntLE());
+                                }
+                                buf.readUnsignedShortLE(); // mil status
+                            }
+                            case 0x0010 -> position.set(Position.KEY_DEVICE_TEMP, buf.readShortLE() / 10.0);
+                            case 0x0011, 0x0012, 0x0013, 0x0014 ->
+                                    position.set(Position.PREFIX_TEMP + (tag - 0x0010), buf.readShortLE() / 10.0);
+                            case 0x0020 -> position.set(Position.KEY_POWER, buf.readUnsignedShortLE() / 100.0);
+                            case 0x0021 -> position.set(Position.KEY_BATTERY, buf.readUnsignedShortLE() / 100.0);
+                            default -> buf.skipBytes(length);
+                        }
                     }
                 }
 
@@ -418,12 +448,26 @@ public class CastelProtocolDecoder extends BaseProtocolDecoder {
                 return position;
 
             case MSG_SC_DTCS_PASSENGER:
+            case MSG_SC_DTCS_COMMERCIAL:
                 position = createPosition(deviceSession);
 
                 decodeStat(position, buf);
 
                 buf.readUnsignedByte(); // flag
-                position.add(ObdDecoder.decodeCodes(ByteBufUtil.hexDump(buf.readSlice(buf.readUnsignedByte()))));
+
+                count = buf.readUnsignedByte();
+                StringBuilder codes = new StringBuilder();
+                for (int i = 0; i < count; i++) {
+                    if (type == MSG_SC_DTCS_COMMERCIAL) {
+                        codes.append(ObdDecoder.decodeCode(buf.readUnsignedShortLE()));
+                        buf.readUnsignedByte(); // attribute
+                        buf.readUnsignedByte(); // occurrence
+                    } else {
+                        codes.append(ObdDecoder.decodeCode(buf.readUnsignedShortLE()));
+                    }
+                    codes.append(' ');
+                }
+                position.set(Position.KEY_DTCS, codes.toString().trim());
 
                 return position;
 
@@ -443,7 +487,7 @@ public class CastelProtocolDecoder extends BaseProtocolDecoder {
                 decodeStat(position, buf);
 
                 position.setNetwork(new Network(
-                        CellTower.fromLacCid(buf.readUnsignedShortLE(), buf.readUnsignedShortLE())));
+                        CellTower.fromLacCid(getConfig(), buf.readUnsignedShortLE(), buf.readUnsignedShortLE())));
 
                 return position;
 
@@ -499,7 +543,7 @@ public class CastelProtocolDecoder extends BaseProtocolDecoder {
                 buf.readUnsignedByte(); // additional flags
 
                 position.setNetwork(new Network(
-                        CellTower.fromLacCid(buf.readUnsignedShortLE(), buf.readUnsignedShortLE())));
+                        CellTower.fromLacCid(getConfig(), buf.readUnsignedShortLE(), buf.readUnsignedShortLE())));
 
                 positions.add(position);
             }
@@ -537,7 +581,7 @@ public class CastelProtocolDecoder extends BaseProtocolDecoder {
 
         if (type == 0x4001) {
 
-            sendResponse(channel, remoteAddress, version, id, (short) type, null);
+            sendResponse(channel, remoteAddress, version, id, type, null);
 
             return readPosition(deviceSession, buf);
 
@@ -595,15 +639,11 @@ public class CastelProtocolDecoder extends BaseProtocolDecoder {
             return null;
         }
 
-        switch (version) {
-            case -1:
-                return decodeMpip(channel, remoteAddress, buf, version, id, type, deviceSession);
-            case 3:
-            case 4:
-                return decodeSc(channel, remoteAddress, buf, version, id, type, deviceSession);
-            default:
-                return decodeCc(channel, remoteAddress, buf, version, id, type, deviceSession);
-        }
+        return switch (version) {
+            case -1 -> decodeMpip(channel, remoteAddress, buf, version, id, type, deviceSession);
+            case 3, 4 -> decodeSc(channel, remoteAddress, buf, version, id, type, deviceSession);
+            default -> decodeCc(channel, remoteAddress, buf, version, id, type, deviceSession);
+        };
     }
 
 }

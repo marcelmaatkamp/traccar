@@ -1,5 +1,5 @@
 /*
- * Copyright 2013 - 2018 Anton Tananaev (anton@traccar.org)
+ * Copyright 2013 - 2023 Anton Tananaev (anton@traccar.org)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -19,10 +19,15 @@ import io.netty.buffer.ByteBuf;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelHandlerContext;
 import org.traccar.BaseFrameDecoder;
+import org.traccar.BaseProtocol;
 
 public class GalileoFrameDecoder extends BaseFrameDecoder {
 
-    private static final int MESSAGE_MINIMUM_LENGTH = 5;
+    private static final int MESSAGE_MINIMUM_LENGTH = 6;
+
+    public GalileoFrameDecoder() {
+        super(BaseProtocol.MAX_FRAME_LENGTH_LARGE);
+    }
 
     @Override
     protected Object decode(
@@ -32,9 +37,15 @@ public class GalileoFrameDecoder extends BaseFrameDecoder {
             return null;
         }
 
-        int length = buf.getUnsignedShortLE(buf.readerIndex() + 1) & 0x7fff;
-        if (buf.readableBytes() >= (length + MESSAGE_MINIMUM_LENGTH)) {
-            return buf.readRetainedSlice(length + MESSAGE_MINIMUM_LENGTH);
+        int length;
+        if (buf.getByte(buf.readerIndex()) == 0x01 && buf.getUnsignedMedium(buf.readerIndex() + 3) == 0x01001c) {
+            length = 3 + buf.getUnsignedShort(buf.readerIndex() + 1);
+        } else {
+            length = 5 + (buf.getUnsignedShortLE(buf.readerIndex() + 1) & 0x7fff);
+        }
+
+        if (buf.readableBytes() >= length) {
+            return buf.readRetainedSlice(length);
         }
 
         return null;

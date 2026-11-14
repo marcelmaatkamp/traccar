@@ -15,9 +15,9 @@
  */
 package org.traccar.protocol;
 
+import org.traccar.Protocol;
 import org.traccar.StringProtocolEncoder;
 import org.traccar.model.Command;
-import org.traccar.Protocol;
 
 public class Gl200ProtocolEncoder extends StringProtocolEncoder {
 
@@ -30,22 +30,19 @@ public class Gl200ProtocolEncoder extends StringProtocolEncoder {
 
         initDevicePassword(command, "");
 
-        switch (command.getType()) {
-            case Command.TYPE_POSITION_SINGLE:
-                return formatCommand(command, "AT+GTRTO=%s,1,,,,,,FFFF$", Command.KEY_DEVICE_PASSWORD);
-            case Command.TYPE_ENGINE_STOP:
-                return formatCommand(command, "AT+GTOUT=%s,1,,,0,0,0,0,0,0,0,,,,,,,FFFF$",
-                        Command.KEY_DEVICE_PASSWORD);
-            case Command.TYPE_ENGINE_RESUME:
-                return formatCommand(command, "AT+GTOUT=%s,0,,,0,0,0,0,0,0,0,,,,,,,FFFF$",
-                        Command.KEY_DEVICE_PASSWORD);
-            case Command.TYPE_IDENTIFICATION:
-                return formatCommand(command, "AT+GTRTO=%s,8,,,,,,FFFF$", Command.KEY_DEVICE_PASSWORD);
-            case Command.TYPE_REBOOT_DEVICE:
-                return formatCommand(command, "AT+GTRTO=%s,3,,,,,,FFFF$", Command.KEY_DEVICE_PASSWORD);
-            default:
-                return null;
-        }
+        return switch (command.getType()) {
+            case Command.TYPE_POSITION_SINGLE -> formatCommand(
+                    command, "AT+GTRTO=%s,1,,,,,,FFFF$", Command.KEY_DEVICE_PASSWORD);
+            case Command.TYPE_ENGINE_STOP -> formatCommand(
+                    command, "AT+GTOUT=%s,1,,,0,0,0,0,0,0,0,,,,,,,FFFF$", Command.KEY_DEVICE_PASSWORD);
+            case Command.TYPE_ENGINE_RESUME -> formatCommand(
+                    command, "AT+GTOUT=%s,0,,,0,0,0,0,0,0,0,,,,,,,FFFF$", Command.KEY_DEVICE_PASSWORD);
+            case Command.TYPE_IDENTIFICATION -> formatCommand(
+                    command, "AT+GTRTO=%s,8,,,,,,FFFF$", Command.KEY_DEVICE_PASSWORD);
+            case Command.TYPE_REBOOT_DEVICE -> formatCommand(
+                    command, "AT+GTRTO=%s,3,,,,,,FFFF$", Command.KEY_DEVICE_PASSWORD);
+            default -> null;
+        };
     }
 
 }

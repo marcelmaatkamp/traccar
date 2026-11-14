@@ -19,15 +19,15 @@ import io.netty.channel.Channel;
 import io.netty.handler.codec.http.FullHttpRequest;
 import io.netty.handler.codec.http.HttpResponseStatus;
 import org.traccar.BaseHttpProtocolDecoder;
-import org.traccar.DeviceSession;
 import org.traccar.Protocol;
 import org.traccar.model.Position;
+import org.traccar.session.DeviceSession;
 
-import javax.json.Json;
-import javax.json.JsonNumber;
-import javax.json.JsonObject;
-import javax.json.JsonString;
-import javax.json.JsonValue;
+import jakarta.json.Json;
+import jakarta.json.JsonNumber;
+import jakarta.json.JsonObject;
+import jakarta.json.JsonString;
+import jakarta.json.JsonValue;
 import java.io.StringReader;
 import java.net.SocketAddress;
 import java.nio.charset.StandardCharsets;
@@ -77,12 +77,12 @@ public class OutsafeProtocolDecoder extends BaseHttpProtocolDecoder {
     }
 
     private void decodeUnknownParam(String name, JsonValue value, Position position) {
-        if (value instanceof JsonNumber) {
-            position.set(name, ((JsonNumber) value).doubleValue());
-        } else if (value instanceof JsonString) {
-            position.set(name, ((JsonString) value).getString());
-        } else if (value == JsonValue.TRUE || value == JsonValue.FALSE) {
-            position.set(name, value == JsonValue.TRUE);
+        switch (value) {
+            case JsonNumber jsonNumber -> position.set(name, jsonNumber.doubleValue());
+            case JsonString jsonString -> position.set(name, jsonString.getString());
+            case JsonValue v when v == JsonValue.TRUE || v == JsonValue.FALSE ->
+                    position.set(name, v == JsonValue.TRUE);
+            default -> {}
         }
     }
 

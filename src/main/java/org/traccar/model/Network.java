@@ -1,5 +1,5 @@
 /*
- * Copyright 2016 - 2019 Anton Tananaev (anton@traccar.org)
+ * Copyright 2016 - 2026 Anton Tananaev (anton@traccar.org)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -17,21 +17,25 @@ package org.traccar.model;
 
 import com.fasterxml.jackson.annotation.JsonInclude;
 
-import java.util.ArrayList;
-import java.util.Collection;
+import java.util.LinkedHashSet;
+import java.util.Objects;
+import java.util.Set;
 
 @JsonInclude(JsonInclude.Include.NON_NULL)
 public class Network {
 
-    public Network() {
+    public Network() {}
+
+    public Network(CellTower... cellTowers) {
+        for (var tower : cellTowers) {
+            addCellTower(tower);
+        }
     }
 
-    public Network(CellTower cellTower) {
-        addCellTower(cellTower);
-    }
-
-    public Network(WifiAccessPoint wifiAccessPoint) {
-        addWifiAccessPoint(wifiAccessPoint);
+    public Network(WifiAccessPoint... wifiAccessPoints) {
+        for (var accessPoint : wifiAccessPoints) {
+            addWifiAccessPoint(accessPoint);
+        }
     }
 
     private Integer homeMobileCountryCode;
@@ -84,38 +88,61 @@ public class Network {
         this.considerIp = considerIp;
     }
 
-    private Collection<CellTower> cellTowers;
+    private Set<CellTower> cellTowers;
 
-    public Collection<CellTower> getCellTowers() {
+    public Set<CellTower> getCellTowers() {
         return cellTowers;
     }
 
-    public void setCellTowers(Collection<CellTower> cellTowers) {
+    public void setCellTowers(Set<CellTower> cellTowers) {
         this.cellTowers = cellTowers;
     }
 
     public void addCellTower(CellTower cellTower) {
         if (cellTowers == null) {
-            cellTowers = new ArrayList<>();
+            cellTowers = new LinkedHashSet<>();
         }
         cellTowers.add(cellTower);
     }
 
-    private Collection<WifiAccessPoint> wifiAccessPoints;
+    private Set<WifiAccessPoint> wifiAccessPoints;
 
-    public Collection<WifiAccessPoint> getWifiAccessPoints() {
+    public Set<WifiAccessPoint> getWifiAccessPoints() {
         return wifiAccessPoints;
     }
 
-    public void setWifiAccessPoints(Collection<WifiAccessPoint> wifiAccessPoints) {
+    public void setWifiAccessPoints(Set<WifiAccessPoint> wifiAccessPoints) {
         this.wifiAccessPoints = wifiAccessPoints;
     }
 
     public void addWifiAccessPoint(WifiAccessPoint wifiAccessPoint) {
         if (wifiAccessPoints == null) {
-            wifiAccessPoints = new ArrayList<>();
+            wifiAccessPoints = new LinkedHashSet<>();
         }
         wifiAccessPoints.add(wifiAccessPoint);
+    }
+
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) {
+            return true;
+        }
+        if (o == null || getClass() != o.getClass()) {
+            return false;
+        }
+        Network network = (Network) o;
+        return Objects.equals(homeMobileCountryCode, network.homeMobileCountryCode)
+                && Objects.equals(homeMobileNetworkCode, network.homeMobileNetworkCode)
+                && Objects.equals(radioType, network.radioType)
+                && Objects.equals(carrier, network.carrier)
+                && Objects.equals(cellTowers, network.cellTowers)
+                && Objects.equals(wifiAccessPoints, network.wifiAccessPoints);
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hash(
+                homeMobileCountryCode, homeMobileNetworkCode, radioType, carrier, cellTowers, wifiAccessPoints);
     }
 
 }

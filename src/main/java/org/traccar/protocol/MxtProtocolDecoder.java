@@ -1,5 +1,5 @@
 /*
- * Copyright 2015 - 2018 Anton Tananaev (anton@traccar.org)
+ * Copyright 2015 - 2025 Anton Tananaev (anton@traccar.org)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -19,7 +19,6 @@ import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
 import io.netty.channel.Channel;
 import org.traccar.BaseProtocolDecoder;
-import org.traccar.DeviceSession;
 import org.traccar.NetworkMessage;
 import org.traccar.Protocol;
 import org.traccar.helper.BitUtil;
@@ -27,6 +26,7 @@ import org.traccar.helper.Checksum;
 import org.traccar.helper.DateBuilder;
 import org.traccar.helper.UnitsConverter;
 import org.traccar.model.Position;
+import org.traccar.session.DeviceSession;
 
 import java.net.SocketAddress;
 
@@ -112,7 +112,7 @@ public class MxtProtocolDecoder extends BaseProtocolDecoder {
             long flags = buf.readUnsignedIntLE();
             position.set(Position.KEY_IGNITION, BitUtil.check(flags, 0));
             if (BitUtil.check(flags, 1)) {
-                position.set(Position.KEY_ALARM, Position.ALARM_GENERAL);
+                position.addAlarm(Position.ALARM_GENERAL);
             }
             position.set(Position.KEY_INPUT, BitUtil.between(flags, 2, 7));
             position.set(Position.KEY_OUTPUT, BitUtil.between(flags, 7, 10));
@@ -155,7 +155,7 @@ public class MxtProtocolDecoder extends BaseProtocolDecoder {
             }
 
             if (BitUtil.check(infoGroups, 6)) {
-                position.set(Position.KEY_POWER, buf.readUnsignedShortLE() * 0.001);
+                position.set(Position.KEY_POWER, buf.readUnsignedShortLE() / 1000.0);
                 position.set(Position.KEY_BATTERY, buf.readUnsignedShortLE());
             }
 

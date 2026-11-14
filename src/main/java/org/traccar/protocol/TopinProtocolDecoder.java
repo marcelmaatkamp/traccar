@@ -20,7 +20,6 @@ import io.netty.buffer.ByteBufUtil;
 import io.netty.buffer.Unpooled;
 import io.netty.channel.Channel;
 import org.traccar.BaseProtocolDecoder;
-import org.traccar.DeviceSession;
 import org.traccar.NetworkMessage;
 import org.traccar.Protocol;
 import org.traccar.helper.BcdUtil;
@@ -31,6 +30,7 @@ import org.traccar.model.CellTower;
 import org.traccar.model.Network;
 import org.traccar.model.Position;
 import org.traccar.model.WifiAccessPoint;
+import org.traccar.session.DeviceSession;
 
 import java.net.SocketAddress;
 import java.util.Calendar;
@@ -48,9 +48,19 @@ public class TopinProtocolDecoder extends BaseProtocolDecoder {
     public static final int MSG_GPS = 0x10;
     public static final int MSG_GPS_OFFLINE = 0x11;
     public static final int MSG_STATUS = 0x13;
+    public static final int MSG_SLEEP = 0x14;
+    public static final int MSG_FACTORY_RESET = 0x15;
     public static final int MSG_WIFI_OFFLINE = 0x17;
+    public static final int MSG_LBS_WIFI = 0x18;
+    public static final int MSG_LBS_WIFI_OFFLINE = 0x19;
+    public static final int MSG_LBS_WIFI_2 = 0x1A;
     public static final int MSG_TIME_UPDATE = 0x30;
+    public static final int MSG_SOS_NUMBER = 0x41;
     public static final int MSG_WIFI = 0x69;
+    public static final int MSG_VIBRATION_ON = 0x92;
+    public static final int MSG_VIBRATION_OFF = 0x93;
+    public static final int MSG_VIBRATION = 0x94;
+    public static final int MSG_SOS_ALARM = 0x99;
 
     private void sendResponse(Channel channel, int length, int type, ByteBuf content) {
         if (channel != null) {
@@ -85,8 +95,21 @@ public class TopinProtocolDecoder extends BaseProtocolDecoder {
         int degrees = buf.readUnsignedByte();
         boolean negative = (buf.getUnsignedByte(buf.readerIndex()) & 0xf0) > 0;
         int decimal = buf.readUnsignedMedium() & 0x0fffff;
-        double result = degrees + decimal * 0.000001;
+        double result = degrees + decimal / 1000000.0;
         return negative ? -result : result;
+    }
+
+    private String decodeAlarm(int alarms) {
+        if (BitUtil.check(alarms, 0)) {
+            return Position.ALARM_VIBRATION;
+        }
+        if (BitUtil.check(alarms, 1)) {
+            return Position.ALARM_OVERSPEED;
+        }
+        if (BitUtil.check(alarms, 4)) {
+            return Position.ALARM_LOW_POWER;
+        }
+        return null;
     }
 
     @Override
@@ -154,17 +177,7 @@ public class TopinProtocolDecoder extends BaseProtocolDecoder {
 
             if (buf.readableBytes() >= 5) {
                 position.setAltitude(buf.readShort());
-
-                int alarms = buf.readUnsignedByte();
-                if (BitUtil.check(alarms, 0)) {
-                    position.set(Position.KEY_ALARM, Position.ALARM_VIBRATION);
-                }
-                if (BitUtil.check(alarms, 1)) {
-                    position.set(Position.KEY_ALARM, Position.ALARM_OVERSPEED);
-                }
-                if (BitUtil.check(alarms, 4)) {
-                    position.set(Position.KEY_ALARM, Position.ALARM_LOW_POWER);
-                }
+                position.addAlarm(decodeAlarm(buf.readUnsignedByte()));
             }
 
             ByteBuf content = Unpooled.buffer();
@@ -186,21 +199,31 @@ public class TopinProtocolDecoder extends BaseProtocolDecoder {
 
             getLastLocation(position, null);
 
+            ByteBuf content = buf.retainedSlice(buf.readerIndex(), buf.readableBytes() - 2);
+
             position.set(Position.KEY_BATTERY_LEVEL, buf.readUnsignedByte());
             position.set(Position.KEY_VERSION_FW, buf.readUnsignedByte());
             buf.readUnsignedByte(); // timezone
-            int interval = buf.readUnsignedByte();
-            if (length >= 7) {
+            buf.readUnsignedByte(); // interval
+            if (buf.readableBytes() >= 1 + 2) {
                 position.set(Position.KEY_RSSI, buf.readUnsignedByte());
             }
+            if (buf.readableBytes() >= 3 + 2) {
+                buf.skipBytes(3); // temperature
+            }
+            if (buf.readableBytes() >= 1 + 2) {
+                position.set(Position.KEY_CHARGE, buf.readUnsignedByte() > 0);
+            }
+            if (buf.readableBytes() >= 1 + 2) {
+                position.set(Position.KEY_HEART_RATE, buf.readUnsignedByte());
+            }
 
-            ByteBuf content = Unpooled.buffer();
-            content.writeByte(interval);
             sendResponse(channel, length, type, content);
 
             return position;
 
-        } else if (type == MSG_WIFI || type == MSG_WIFI_OFFLINE) {
+        } else if (type == MSG_WIFI || type == MSG_WIFI_OFFLINE
+                || type == MSG_LBS_WIFI || type == MSG_LBS_WIFI_2 || type == MSG_LBS_WIFI_OFFLINE) {
 
             Position position = new Position(getProtocolName());
             position.setDeviceId(deviceSession.getDeviceId());
@@ -229,8 +252,13 @@ public class TopinProtocolDecoder extends BaseProtocolDecoder {
             int mcc = buf.readUnsignedShort();
             int mnc = buf.readUnsignedByte();
             for (int i = 0; i < cellCount; i++) {
-                network.addCellTower(CellTower.from(
-                        mcc, mnc, buf.readUnsignedShort(), buf.readUnsignedShort(), buf.readUnsignedByte()));
+                int lac = type == MSG_LBS_WIFI_2 ? buf.readInt() : buf.readUnsignedShort();
+                long cid = type == MSG_LBS_WIFI_2 ? buf.readUnsignedInt() : buf.readUnsignedShort();
+                network.addCellTower(CellTower.from(mcc, mnc, lac, cid, buf.readUnsignedByte()));
+            }
+
+            if (buf.readableBytes() > 2) {
+                position.addAlarm(decodeAlarm(buf.readUnsignedByte()));
             }
 
             position.setNetwork(network);
@@ -238,6 +266,28 @@ public class TopinProtocolDecoder extends BaseProtocolDecoder {
             ByteBuf content = Unpooled.buffer();
             content.writeBytes(time);
             sendResponse(channel, length, type, content);
+
+            return position;
+
+        } else if (type == MSG_VIBRATION) {
+
+            Position position = new Position(getProtocolName());
+            position.setDeviceId(deviceSession.getDeviceId());
+
+            getLastLocation(position, null);
+
+            position.addAlarm(Position.ALARM_VIBRATION);
+
+            return position;
+
+        } else if (type == MSG_SOS_ALARM) {
+
+            Position position = new Position(getProtocolName());
+            position.setDeviceId(deviceSession.getDeviceId());
+
+            getLastLocation(position, null);
+
+            position.addAlarm(Position.ALARM_SOS);
 
             return position;
 

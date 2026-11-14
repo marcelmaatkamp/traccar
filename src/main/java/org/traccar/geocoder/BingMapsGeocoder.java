@@ -16,13 +16,15 @@
  */
 package org.traccar.geocoder;
 
-import javax.json.JsonArray;
-import javax.json.JsonObject;
+import jakarta.json.JsonArray;
+import jakarta.json.JsonObject;
+import jakarta.ws.rs.client.Client;
+import java.util.Locale;
 
 public class BingMapsGeocoder extends JsonGeocoder {
 
-    public BingMapsGeocoder(String url, String key, int cacheSize, AddressFormat addressFormat) {
-        super(url + "/Locations/%f,%f?key=" + key + "&include=ciso2", cacheSize, addressFormat);
+    public BingMapsGeocoder(Client client, String url, String key, int cacheSize, AddressFormat addressFormat) {
+        super(client, url + "/Locations/%f,%f?key=" + key + "&include=ciso2", cacheSize, addressFormat);
     }
 
     @Override
@@ -46,7 +48,7 @@ public class BingMapsGeocoder extends JsonGeocoder {
                     address.setState(location.getString("adminDistrict"));
                 }
                 if (location.containsKey("countryRegionIso2")) {
-                    address.setCountry(location.getString("countryRegionIso2").toUpperCase());
+                    address.setCountry(location.getString("countryRegionIso2").toUpperCase(Locale.ROOT));
                 }
                 if (location.containsKey("postalCode")) {
                     address.setPostcode(location.getString("postalCode"));

@@ -1,24 +1,38 @@
 package org.traccar.protocol;
 
-import org.junit.Test;
+import org.junit.jupiter.api.Test;
 import org.traccar.ProtocolTest;
 import org.traccar.model.Command;
-
-import static org.junit.Assert.assertEquals;
 
 public class TotemProtocolEncoderTest extends ProtocolTest {
 
     @Test
     public void testEncode() throws Exception {
 
-        var encoder = new TotemProtocolEncoder(null);
+        var channel = channel(inject(new TotemProtocolEncoder(null)));
 
         Command command = new Command();
         command.setDeviceId(2);
-        command.setType(Command.TYPE_ENGINE_STOP);
+        command.setType(Command.TYPE_REBOOT_DEVICE);
         command.set(Command.KEY_DEVICE_PASSWORD, "000000");
 
-        assertEquals("*000000,025,C,1#", encoder.encodeCommand(command));
+        verifyEncode(channel, command,
+                text("$$0020CF000000,0061D"));
+
+    }
+
+    @Test
+    public void testSmsEncode() throws Exception {
+
+        var channel = channel(inject(new TotemProtocolSmsEncoder(null)));
+
+        Command command = new Command();
+        command.setDeviceId(2);
+        command.setType(Command.TYPE_REBOOT_DEVICE);
+        command.set(Command.KEY_DEVICE_PASSWORD, "000000");
+
+        verifyEncode(channel, command,
+                text("*000000,006#"));
 
     }
 

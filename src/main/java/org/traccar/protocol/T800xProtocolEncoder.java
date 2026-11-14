@@ -19,9 +19,9 @@ import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
 import io.netty.channel.Channel;
 import org.traccar.BaseProtocolEncoder;
+import org.traccar.Protocol;
 import org.traccar.helper.DataConverter;
 import org.traccar.model.Command;
-import org.traccar.Protocol;
 
 import java.nio.charset.StandardCharsets;
 
@@ -58,12 +58,10 @@ public class T800xProtocolEncoder extends BaseProtocolEncoder {
             header = channel.pipeline().get(T800xProtocolDecoder.class).getHeader();
         }
 
-        switch (command.getType()) {
-            case Command.TYPE_CUSTOM:
-                return encodeContent(command, header, command.getString(Command.KEY_DATA));
-            default:
-                return null;
-        }
+        return switch (command.getType()) {
+            case Command.TYPE_CUSTOM -> encodeContent(command, header, command.getString(Command.KEY_DATA));
+            default -> null;
+        };
     }
 
 }

@@ -1,5 +1,5 @@
 /*
- * Copyright 2016 - 2017 Anton Tananaev (anton@traccar.org)
+ * Copyright 2016 - 2026 Anton Tananaev (anton@traccar.org)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -18,10 +18,11 @@ package org.traccar.api.resource;
 import org.traccar.api.SimpleObjectResource;
 import org.traccar.model.Group;
 
-import javax.ws.rs.Consumes;
-import javax.ws.rs.Path;
-import javax.ws.rs.Produces;
-import javax.ws.rs.core.MediaType;
+import jakarta.ws.rs.Consumes;
+import jakarta.ws.rs.Path;
+import jakarta.ws.rs.Produces;
+import jakarta.ws.rs.core.MediaType;
+import java.util.List;
 
 @Path("groups")
 @Produces(MediaType.APPLICATION_JSON)
@@ -29,7 +30,7 @@ import javax.ws.rs.core.MediaType;
 public class GroupResource extends SimpleObjectResource<Group> {
 
     public GroupResource() {
-        super(Group.class);
+        super(Group.class, "name", List.of("name"));
     }
 
 }

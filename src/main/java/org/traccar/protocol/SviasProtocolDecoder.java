@@ -20,14 +20,14 @@ import org.traccar.BaseProtocolDecoder;
 import org.traccar.NetworkMessage;
 import org.traccar.Protocol;
 import org.traccar.helper.BitUtil;
+import org.traccar.helper.Parser;
 import org.traccar.helper.PatternBuilder;
+import org.traccar.helper.UnitsConverter;
+import org.traccar.model.Position;
+import org.traccar.session.DeviceSession;
 
 import java.net.SocketAddress;
 import java.util.regex.Pattern;
-import org.traccar.DeviceSession;
-import org.traccar.helper.Parser;
-import org.traccar.helper.UnitsConverter;
-import org.traccar.model.Position;
 
 public class SviasProtocolDecoder extends BaseProtocolDecoder {
 
@@ -83,19 +83,19 @@ public class SviasProtocolDecoder extends BaseProtocolDecoder {
         position.setTime(parser.nextDateTime(Parser.DateTimeFormat.DMY_HMS));
         position.setLatitude(parser.nextCoordinate(Parser.CoordinateFormat.HEM_DEG_MIN_MIN));
         position.setLongitude(parser.nextCoordinate(Parser.CoordinateFormat.HEM_DEG_MIN_MIN));
-        position.setSpeed(UnitsConverter.knotsFromKph(parser.nextDouble() * 0.01));
-        position.setCourse(parser.nextDouble() * 0.01);
+        position.setSpeed(UnitsConverter.knotsFromKph(parser.nextDouble() / 100.0));
+        position.setCourse(parser.nextDouble() / 100.0);
 
         position.set(Position.KEY_ODOMETER, parser.nextInt() * 100);
 
         int input = parser.nextInt();
         int output = parser.nextInt();
 
-        position.set(Position.KEY_ALARM, BitUtil.check(input, 0) ? Position.ALARM_SOS : null);
+        position.addAlarm(BitUtil.check(input, 0) ? Position.ALARM_SOS : null);
         position.set(Position.KEY_IGNITION, BitUtil.check(input, 4));
         position.setValid(BitUtil.check(output, 0));
 
-        position.set(Position.KEY_POWER, parser.nextInt() * 0.001);
+        position.set(Position.KEY_POWER, parser.nextInt() / 1000.0);
         position.set(Position.KEY_BATTERY_LEVEL, parser.nextInt());
         position.set(Position.KEY_RSSI, parser.nextInt());
 

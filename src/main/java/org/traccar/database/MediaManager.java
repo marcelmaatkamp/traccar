@@ -1,5 +1,5 @@
 /*
- * Copyright 2017 - 2018 Anton Tananaev (anton@traccar.org)
+ * Copyright 2017 - 2022 Anton Tananaev (anton@traccar.org)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -18,30 +18,45 @@ package org.traccar.database;
 import io.netty.buffer.ByteBuf;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.traccar.config.Config;
+import org.traccar.config.Keys;
 
+import jakarta.inject.Inject;
+import jakarta.inject.Singleton;
 import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
+import java.io.OutputStream;
 import java.nio.ByteBuffer;
 import java.nio.channels.FileChannel;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
-import java.text.SimpleDateFormat;
-import java.util.Date;
+import java.time.Instant;
+import java.time.ZoneId;
+import java.time.format.DateTimeFormatter;
 
+@Singleton
 public class MediaManager {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(MediaManager.class);
 
-    private String path;
+    private static final DateTimeFormatter DATE_FORMAT = DateTimeFormatter
+            .ofPattern("yyyyMMddHHmmss").withZone(ZoneId.systemDefault());
 
-    public MediaManager(String path) {
-        this.path = path;
+    private final Path path;
+
+    @Inject
+    public MediaManager(Config config) {
+        String configuredPath = config.getString(Keys.MEDIA_PATH);
+        path = configuredPath != null ? Paths.get(configuredPath).toAbsolutePath().normalize() : null;
     }
 
     private File createFile(String uniqueId, String name) throws IOException {
-        Path filePath = Paths.get(path, uniqueId, name);
+        Path filePath = path.resolve(uniqueId).resolve(name).normalize();
+        if (!filePath.startsWith(path)) {
+            throw new IOException("Invalid media path");
+        }
         Path directoryPath = filePath.getParent();
         if (directoryPath != null) {
             Files.createDirectories(directoryPath);
@@ -49,13 +64,17 @@ public class MediaManager {
         return filePath.toFile();
     }
 
+    public OutputStream createFileStream(String uniqueId, String name, String extension) throws IOException {
+        return new FileOutputStream(createFile(uniqueId, name + "." + extension));
+    }
+
     public String writeFile(String uniqueId, ByteBuf buf, String extension) {
         if (path != null) {
             int size = buf.readableBytes();
-            String name = new SimpleDateFormat("yyyyMMddHHmmss").format(new Date()) + "." + extension;
+            String name = DATE_FORMAT.format(Instant.now()) + "." + extension;
             try (FileOutputStream output = new FileOutputStream(createFile(uniqueId, name));
                     FileChannel fileChannel = output.getChannel()) {
-                    ByteBuffer byteBuffer = buf.nioBuffer();
+                ByteBuffer byteBuffer = buf.nioBuffer();
                 int written = 0;
                 while (written < size) {
                     written += fileChannel.write(byteBuffer);

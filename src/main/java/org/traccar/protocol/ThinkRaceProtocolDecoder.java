@@ -19,13 +19,13 @@ import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
 import io.netty.channel.Channel;
 import org.traccar.BaseProtocolDecoder;
-import org.traccar.DeviceSession;
 import org.traccar.NetworkMessage;
 import org.traccar.Protocol;
 import org.traccar.helper.BitUtil;
 import org.traccar.model.CellTower;
 import org.traccar.model.Network;
 import org.traccar.model.Position;
+import org.traccar.session.DeviceSession;
 
 import java.net.SocketAddress;
 import java.nio.charset.StandardCharsets;
@@ -42,7 +42,7 @@ public class ThinkRaceProtocolDecoder extends BaseProtocolDecoder {
 
     private static double convertCoordinate(long raw, boolean negative) {
         long degrees = raw / 1000000;
-        double minutes = (raw % 1000000) * 0.0001;
+        double minutes = (raw % 1000000) / 10000.0;
         double result = degrees + minutes / 60;
         if (negative) {
             result = -result;
@@ -71,7 +71,8 @@ public class ThinkRaceProtocolDecoder extends BaseProtocolDecoder {
                 DeviceSession deviceSession = getDeviceSession(channel, remoteAddress, imei);
                 if (deviceSession != null && channel != null) {
                     ByteBuf response = Unpooled.buffer();
-                    response.writeByte(0x48); response.writeByte(0x52); // header
+                    response.writeByte(0x48); // header
+                    response.writeByte(0x52); // header
                     response.writeBytes(id);
                     response.writeByte(0x2c); // separator
                     response.writeByte(type);
@@ -104,7 +105,7 @@ public class ThinkRaceProtocolDecoder extends BaseProtocolDecoder {
             position.setCourse(buf.readUnsignedByte());
 
             position.setNetwork(new Network(
-                    CellTower.fromLacCid(buf.readUnsignedShort(), buf.readUnsignedShort())));
+                    CellTower.fromLacCid(getConfig(), buf.readUnsignedShort(), buf.readUnsignedShort())));
 
             return position;
 

@@ -18,9 +18,9 @@ package org.traccar.protocol;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
 import org.traccar.BaseProtocolEncoder;
+import org.traccar.Protocol;
 import org.traccar.helper.Checksum;
 import org.traccar.model.Command;
-import org.traccar.Protocol;
 
 import java.nio.charset.StandardCharsets;
 
@@ -58,15 +58,13 @@ public class GalileoProtocolEncoder extends BaseProtocolEncoder {
     @Override
     protected Object encodeCommand(Command command) {
 
-        switch (command.getType()) {
-            case Command.TYPE_CUSTOM:
-                return encodeText(getUniqueId(command.getDeviceId()), command.getString(Command.KEY_DATA));
-            case Command.TYPE_OUTPUT_CONTROL:
-                return encodeText(getUniqueId(command.getDeviceId()),
-                        "Out " + command.getInteger(Command.KEY_INDEX) + "," + command.getString(Command.KEY_DATA));
-            default:
-                return null;
-        }
+        return switch (command.getType()) {
+            case Command.TYPE_CUSTOM -> encodeText(getUniqueId(command.getDeviceId()),
+                    command.getString(Command.KEY_DATA));
+            case Command.TYPE_OUTPUT_CONTROL -> encodeText(getUniqueId(command.getDeviceId()),
+                    "Out " + command.getInteger(Command.KEY_INDEX) + "," + command.getString(Command.KEY_DATA));
+            default -> null;
+        };
     }
 
 }

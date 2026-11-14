@@ -21,14 +21,18 @@ import org.traccar.BaseProtocol;
 import org.traccar.CharacterDelimiterFrameDecoder;
 import org.traccar.PipelineBuilder;
 import org.traccar.TrackerServer;
+import org.traccar.config.Config;
+
+import jakarta.inject.Inject;
 
 public class M2cProtocol extends BaseProtocol {
 
-    public M2cProtocol() {
-        addServer(new TrackerServer(false, getName()) {
+    @Inject
+    public M2cProtocol(Config config) {
+        addServer(new TrackerServer(config, getName(), false) {
             @Override
-            protected void addProtocolHandlers(PipelineBuilder pipeline) {
-                pipeline.addLast(new CharacterDelimiterFrameDecoder(32 * 1024, ']'));
+            protected void addProtocolHandlers(PipelineBuilder pipeline, Config config) {
+                pipeline.addLast(new CharacterDelimiterFrameDecoder(MAX_FRAME_LENGTH_LARGE, ']'));
                 pipeline.addLast(new StringDecoder());
                 pipeline.addLast(new StringEncoder());
                 pipeline.addLast(new M2cProtocolDecoder(M2cProtocol.this));

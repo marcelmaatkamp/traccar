@@ -1,5 +1,5 @@
 /*
- * Copyright 2015 - 2020 Anton Tananaev (anton@traccar.org)
+ * Copyright 2015 - 2026 Anton Tananaev (anton@traccar.org)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -20,21 +20,25 @@ import io.netty.buffer.ByteBufUtil;
 import io.netty.buffer.Unpooled;
 import io.netty.channel.Channel;
 import org.traccar.BaseProtocolDecoder;
-import org.traccar.DeviceSession;
 import org.traccar.NetworkMessage;
 import org.traccar.Protocol;
+import org.traccar.config.Keys;
 import org.traccar.helper.BcdUtil;
 import org.traccar.helper.BitUtil;
 import org.traccar.helper.DateBuilder;
 import org.traccar.helper.UnitsConverter;
+import org.traccar.helper.model.AttributeUtil;
 import org.traccar.model.CellTower;
 import org.traccar.model.Network;
 import org.traccar.model.Position;
+import org.traccar.session.DeviceSession;
 
 import java.math.BigInteger;
 import java.net.SocketAddress;
 import java.nio.charset.StandardCharsets;
 import java.util.Date;
+import java.util.LinkedList;
+import java.util.List;
 
 public class T800xProtocolDecoder extends BaseProtocolDecoder {
 
@@ -54,8 +58,13 @@ public class T800xProtocolDecoder extends BaseProtocolDecoder {
     public static final int MSG_GPS = 0x02;
     public static final int MSG_HEARTBEAT = 0x03;
     public static final int MSG_ALARM = 0x04;
-    public static final int MSG_NETWORK = 0x05;
+    public static final int MSG_NETWORK = 0x05; // 0x2727
+    public static final int MSG_DRIVER_BEHAVIOR_1 = 0x05; // 0x2626
+    public static final int MSG_DRIVER_BEHAVIOR_2 = 0x06; // 0x2626
     public static final int MSG_BLE = 0x10;
+    public static final int MSG_NETWORK_2 = 0x11;
+    public static final int MSG_GPS_2 = 0x13;
+    public static final int MSG_ALARM_2 = 0x14;
     public static final int MSG_COMMAND = 0x81;
 
     private void sendResponse(Channel channel, short header, int type, int index, ByteBuf imei, int alarm) {
@@ -73,34 +82,34 @@ public class T800xProtocolDecoder extends BaseProtocolDecoder {
         }
     }
 
-    private String decodeAlarm(int value) {
-        switch (value) {
-            case 1:
-                return Position.ALARM_POWER_CUT;
-            case 2:
-                return Position.ALARM_LOW_BATTERY;
-            case 3:
-                return Position.ALARM_SOS;
-            case 4:
-                return Position.ALARM_OVERSPEED;
-            case 5:
-                return Position.ALARM_GEOFENCE_ENTER;
-            case 6:
-                return Position.ALARM_GEOFENCE_EXIT;
-            case 7:
-                return Position.ALARM_TOW;
-            case 8:
-            case 10:
-                return Position.ALARM_VIBRATION;
-            case 21:
-                return Position.ALARM_JAMMING;
-            case 23:
-                return Position.ALARM_POWER_RESTORED;
-            case 24:
-                return Position.ALARM_LOW_POWER;
-            default:
-                return null;
-        }
+    private String decodeAlarm1(int value) {
+        return switch (value) {
+            case 1 -> Position.ALARM_POWER_CUT;
+            case 2 -> Position.ALARM_LOW_BATTERY;
+            case 3 -> Position.ALARM_SOS;
+            case 4 -> Position.ALARM_OVERSPEED;
+            case 5 -> Position.ALARM_GEOFENCE_ENTER;
+            case 6 -> Position.ALARM_GEOFENCE_EXIT;
+            case 7 -> Position.ALARM_TOW;
+            case 8, 10 -> Position.ALARM_VIBRATION;
+            case 21 -> Position.ALARM_JAMMING;
+            case 23 -> Position.ALARM_POWER_RESTORED;
+            case 24 -> Position.ALARM_LOW_POWER;
+            default -> null;
+        };
+    }
+
+    private String decodeAlarm2(int value) {
+        return switch (value) {
+            case 1, 4 -> Position.ALARM_REMOVING;
+            case 2 -> Position.ALARM_TAMPERING;
+            case 3 -> Position.ALARM_SOS;
+            case 5 -> Position.ALARM_FALL_DOWN;
+            case 6 -> Position.ALARM_LOW_BATTERY;
+            case 14 -> Position.ALARM_GEOFENCE_ENTER;
+            case 15 -> Position.ALARM_GEOFENCE_EXIT;
+            default -> null;
+        };
     }
 
     private Date readDate(ByteBuf buf) {
@@ -132,15 +141,16 @@ public class T800xProtocolDecoder extends BaseProtocolDecoder {
             return null;
         }
 
-        if (type != MSG_GPS && type != MSG_ALARM) {
-            sendResponse(channel, header, type, index, imei, 0);
+        boolean positionType = type == MSG_GPS || type == MSG_GPS_2 || type == MSG_ALARM || type == MSG_ALARM_2;
+        if (!positionType) {
+            sendResponse(channel, header, type, header == 0x2323 ? 1 : index, imei, 0);
         }
 
-        if (type == MSG_GPS || type == MSG_ALARM) {
+        if (positionType) {
 
             return decodePosition(channel, deviceSession, buf, type, index, imei);
 
-        } else if (type == MSG_NETWORK) {
+        } else if (type == MSG_NETWORK && header == 0x2727 || type == MSG_NETWORK_2) {
 
             Position position = new Position(getProtocolName());
             position.setDeviceId(deviceSession.getDeviceId());
@@ -156,6 +166,78 @@ public class T800xProtocolDecoder extends BaseProtocolDecoder {
             buf.readCharSequence(buf.readUnsignedByte(), StandardCharsets.US_ASCII); // imsi
             position.set(Position.KEY_ICCID, buf.readCharSequence(
                     buf.readUnsignedByte(), StandardCharsets.US_ASCII).toString());
+
+            return position;
+
+        } else if (type == MSG_DRIVER_BEHAVIOR_1 && header == 0x2626) {
+
+            String alarm = switch (buf.readUnsignedByte()) {
+                case 0, 2, 4 -> Position.ALARM_BRAKING;
+                case 1, 3, 5 -> Position.ALARM_ACCELERATION;
+                default -> null;
+            };
+
+            List<Position> positions = new LinkedList<>();
+            while (buf.readableBytes() >= 24) {
+                Position position = new Position(getProtocolName());
+                position.setDeviceId(deviceSession.getDeviceId());
+
+                Date time = readDate(buf);
+
+                if (buf.getInt(buf.readerIndex()) != -1) {
+                    position.setValid(true);
+                    position.setTime(time);
+                    position.setAltitude(buf.readFloatLE());
+                    position.setLongitude(buf.readFloatLE());
+                    position.setLatitude(buf.readFloatLE());
+                } else {
+                    buf.skipBytes(12);
+                    getLastLocation(position, time);
+                }
+
+                position.setSpeed(UnitsConverter.knotsFromKph(BcdUtil.readInteger(buf, 4) / 10.0));
+
+                int course = buf.readUnsignedShort();
+                if (course != 0xffff) {
+                    position.setCourse(course / 10.0);
+                }
+
+                int rpm = buf.readUnsignedShort();
+                if (rpm != 0xffff) {
+                    position.set(Position.KEY_RPM, rpm);
+                }
+
+                positions.add(position);
+            }
+
+            positions.getLast().addAlarm(alarm);
+
+            return positions;
+
+        } else if (type == MSG_DRIVER_BEHAVIOR_2 && header == 0x2626) {
+
+            Position position = new Position(getProtocolName());
+            position.setDeviceId(deviceSession.getDeviceId());
+
+            switch (buf.readUnsignedByte()) {
+                case 0 -> position.addAlarm(Position.ALARM_BRAKING);
+                case 1 -> position.addAlarm(Position.ALARM_ACCELERATION);
+                case 2 -> position.addAlarm(Position.ALARM_CORNERING);
+            }
+
+            position.setTime(readDate(buf));
+
+            int status = buf.readUnsignedByte();
+            position.setValid(!BitUtil.check(status, 7));
+            buf.skipBytes(5); // acceleration
+
+            position.setAltitude(buf.readFloatLE());
+            position.setLongitude(buf.readFloatLE());
+            position.setLatitude(buf.readFloatLE());
+            position.setSpeed(UnitsConverter.knotsFromKph(BcdUtil.readInteger(buf, 4) / 10.0));
+            position.setCourse(buf.readUnsignedShort() / 10.0);
+
+            position.set(Position.KEY_RPM, buf.readUnsignedShort());
 
             return position;
 
@@ -181,6 +263,11 @@ public class T800xProtocolDecoder extends BaseProtocolDecoder {
         return null;
     }
 
+    private double decodeBleTemp(ByteBuf buf) {
+        int value = buf.readUnsignedShort();
+        return (BitUtil.check(value, 15) ? -BitUtil.to(value, 15) : BitUtil.to(value, 15)) / 100.0;
+    }
+
     private Position decodeBle(
             Channel channel, DeviceSession deviceSession, ByteBuf buf, int type, int index, ByteBuf imei) {
 
@@ -191,56 +278,66 @@ public class T800xProtocolDecoder extends BaseProtocolDecoder {
 
         position.set(Position.KEY_IGNITION, buf.readUnsignedByte() > 0);
 
-        switch (buf.readUnsignedShort()) {
-            case 0x01:
-                position.set("tagId", ByteBufUtil.hexDump(buf.readSlice(6)));
-                position.set("tagBattery", buf.readUnsignedByte() * 0.01 + 1.22);
-                position.set("tirePressure", buf.readUnsignedByte() * 1.527 * 2);
-                position.set("tagTemp", buf.readUnsignedByte() - 55);
-                position.set("tagStatus", buf.readUnsignedByte());
-                break;
-            case 0x02:
-                position.set("tagId", ByteBufUtil.hexDump(buf.readSlice(6)));
-                position.set("tagBattery", BcdUtil.readInteger(buf, 2) * 0.1);
-                switch (buf.readUnsignedByte()) {
-                    case 0:
-                        position.set(Position.KEY_ALARM, Position.ALARM_SOS);
-                        break;
-                    case 1:
-                        position.set(Position.KEY_ALARM, Position.ALARM_LOW_BATTERY);
-                        break;
-                    default:
-                        break;
+        int i = 1;
+        while (buf.isReadable()) {
+            switch (buf.readUnsignedShort()) {
+                case 0x01 -> {
+                    position.set("tag" + i + "Id", ByteBufUtil.hexDump(buf.readSlice(6)));
+                    position.set("tag" + i + "Battery", buf.readUnsignedByte() / 100.0 + 1.22);
+                    position.set("tag" + i + "TirePressure", buf.readUnsignedByte() * 1.527 * 2);
+                    position.set("tag" + i + "TireTemp", buf.readUnsignedByte() - 55);
+                    position.set("tag" + i + "TireStatus", buf.readUnsignedByte());
                 }
-                break;
-            case 0x03:
-                position.set(Position.KEY_DRIVER_UNIQUE_ID, ByteBufUtil.hexDump(buf.readSlice(6)));
-                position.set("tagBattery", BcdUtil.readInteger(buf, 2) * 0.1);
-                if (buf.readUnsignedByte() == 1) {
-                    position.set(Position.KEY_ALARM, Position.ALARM_LOW_BATTERY);
+                case 0x02 -> {
+                    position.set("tag" + i + "Id", ByteBufUtil.hexDump(buf.readSlice(6)));
+                    position.set("tag" + i + "Battery", BcdUtil.readInteger(buf, 2) / 10.0);
+                    switch (buf.readUnsignedByte()) {
+                        case 0:
+                            position.addAlarm(Position.ALARM_SOS);
+                            break;
+                        case 1:
+                            position.addAlarm(Position.ALARM_LOW_BATTERY);
+                            break;
+                        default:
+                            break;
+                    }
+                    buf.readUnsignedByte(); // status
+                    buf.skipBytes(16); // location
                 }
-                break;
-            case 0x04:
-                position.set("tagId", ByteBufUtil.hexDump(buf.readSlice(6)));
-                position.set("tagBattery", buf.readUnsignedByte() * 0.01 + 2);
-                buf.readUnsignedByte(); // battery level
-                position.set(Position.KEY_DEVICE_TEMP, buf.readUnsignedShort() * 0.01);
-                position.set("humidity", buf.readUnsignedShort() * 0.01);
-                position.set("lightSensor", BitUtil.to(buf.readUnsignedByte(), 15));
-                break;
-            case 0x05:
-                position.set("tagId", ByteBufUtil.hexDump(buf.readSlice(6)));
-                position.set("tagBattery", buf.readUnsignedByte() * 0.01 + 2);
-                position.set(Position.KEY_DEVICE_TEMP, buf.readUnsignedShort() * 0.01);
-                position.set(Position.KEY_DOOR, buf.readUnsignedByte() > 0);
-                break;
-            case 0x06:
-                position.set("tagId", ByteBufUtil.hexDump(buf.readSlice(6)));
-                position.set("tagBattery", buf.readUnsignedByte() * 0.01 + 2);
-                position.set(Position.KEY_OUTPUT, buf.readUnsignedByte() > 0);
-                break;
-            default:
-                break;
+                case 0x03 -> {
+                    position.set(Position.KEY_DRIVER_UNIQUE_ID, ByteBufUtil.hexDump(buf.readSlice(6)));
+                    position.set("tag" + i + "Battery", BcdUtil.readInteger(buf, 2) / 10.0);
+                    if (buf.readUnsignedByte() == 1) {
+                        position.addAlarm(Position.ALARM_LOW_BATTERY);
+                    }
+                    buf.readUnsignedByte(); // status
+                    buf.skipBytes(16); // location
+                }
+                case 0x04 -> {
+                    position.set("tag" + i + "Id", ByteBufUtil.hexDump(buf.readSlice(6)));
+                    position.set("tag" + i + "Battery", buf.readUnsignedByte() / 100.0 + 2);
+                    buf.readUnsignedByte(); // battery level
+                    position.set("tag" + i + "Temp", decodeBleTemp(buf));
+                    position.set("tag" + i + "Humidity", buf.readUnsignedShort() / 100.0);
+                    position.set("tag" + i + "LightSensor", buf.readUnsignedShort());
+                    position.set("tag" + i + "Rssi", buf.readUnsignedByte() - 128);
+                }
+                case 0x05 -> {
+                    position.set("tag" + i + "Id", ByteBufUtil.hexDump(buf.readSlice(6)));
+                    position.set("tag" + i + "Battery", buf.readUnsignedByte() / 100.0 + 2);
+                    buf.readUnsignedByte(); // battery level
+                    position.set("tag" + i + "Temp", decodeBleTemp(buf));
+                    position.set("tag" + i + "Door", buf.readUnsignedByte() > 0);
+                    position.set("tag" + i + "Rssi", buf.readUnsignedByte() - 128);
+                }
+                case 0x06 -> {
+                    position.set("tag" + i + "Id", ByteBufUtil.hexDump(buf.readSlice(6)));
+                    position.set("tag" + i + "Battery", buf.readUnsignedByte() / 100.0 + 2);
+                    position.set("tag" + i + "Output", buf.readUnsignedByte() > 0);
+                    position.set("tag" + i + "Rssi", buf.readUnsignedByte() - 128);
+                }
+            }
+            i += 1;
         }
 
         sendResponse(channel, header, type, index, imei, 0);
@@ -283,15 +380,22 @@ public class T800xProtocolDecoder extends BaseProtocolDecoder {
             position.set("ac", BitUtil.check(io, 13));
             position.set(Position.PREFIX_IN + 3, BitUtil.check(io, 12));
             position.set(Position.PREFIX_IN + 4, BitUtil.check(io, 11));
-            position.set(Position.PREFIX_OUT + 1, BitUtil.check(io, 7));
-            position.set(Position.PREFIX_OUT + 2, BitUtil.check(io, 8));
-            position.set(Position.PREFIX_OUT + 3, BitUtil.check(io, 9));
+
+            if (type == MSG_GPS_2 || type == MSG_ALARM_2) {
+                position.set(Position.KEY_OUTPUT, buf.readUnsignedByte());
+                buf.readUnsignedByte(); // reserved
+            } else {
+                position.set(Position.PREFIX_OUT + 1, BitUtil.check(io, 7));
+                position.set(Position.PREFIX_OUT + 2, BitUtil.check(io, 8));
+                position.set(Position.PREFIX_OUT + 3, BitUtil.check(io, 9));
+            }
 
             if (header != 0x2626) {
-                for (int i = 1; i <= 2; i++) {
+                int adcCount = type == MSG_GPS_2 || type == MSG_ALARM_2 ? 5 : 2;
+                for (int i = 1; i <= adcCount; i++) {
                     String value = ByteBufUtil.hexDump(buf.readSlice(2));
                     if (!value.equals("ffff")) {
-                        position.set(Position.PREFIX_ADC + i, Integer.parseInt(value) * 0.01);
+                        position.set(Position.PREFIX_ADC + i, Integer.parseInt(value, 16) / 100.0);
                     }
                 }
             }
@@ -299,7 +403,8 @@ public class T800xProtocolDecoder extends BaseProtocolDecoder {
         }
 
         int alarm = buf.readUnsignedByte();
-        position.set(Position.KEY_ALARM, decodeAlarm(alarm));
+        position.addAlarm(header != 0x2727 ? decodeAlarm1(alarm) : decodeAlarm2(alarm));
+        position.set("alarmCode", alarm);
 
         if (header != 0x2727) {
 
@@ -314,28 +419,43 @@ public class T800xProtocolDecoder extends BaseProtocolDecoder {
 
         if (BitUtil.check(status, 6)) {
 
-            position.setValid(!BitUtil.check(status, 7));
+            position.setValid(true);
             position.setTime(readDate(buf));
             position.setAltitude(buf.readFloatLE());
             position.setLongitude(buf.readFloatLE());
             position.setLatitude(buf.readFloatLE());
-            position.setSpeed(UnitsConverter.knotsFromKph(BcdUtil.readInteger(buf, 4) * 0.1));
+            if (header == 0x2626) {
+                buf.readUnsignedShort(); // reserved or hdop
+            } else {
+                position.setSpeed(UnitsConverter.knotsFromKph(BcdUtil.readInteger(buf, 4) / 10.0));
+            }
             position.setCourse(buf.readUnsignedShort());
 
         } else {
 
             getLastLocation(position, readDate(buf));
 
-            int mcc = buf.readUnsignedShortLE();
-            int mnc = buf.readUnsignedShortLE();
+            int mcc = header == 0x2727 ? buf.readUnsignedShort() : buf.readUnsignedShortLE();
+            int mnc = header == 0x2727 ? buf.readUnsignedShort() : buf.readUnsignedShortLE();
 
             if (mcc != 0xffff && mnc != 0xffff) {
                 Network network = new Network();
-                for (int i = 0; i < 3; i++) {
-                    network.addCellTower(CellTower.from(
-                            mcc, mnc, buf.readUnsignedShortLE(), buf.readUnsignedShortLE()));
+                if (header == 0x2727 && BitUtil.check(mcc, 15)) {
+                    long cid = buf.readUnsignedInt();
+                    int tac = buf.readUnsignedShort();
+                    buf.skipBytes(6); // physical cell ids
+                    network.setRadioType("lte");
+                    network.addCellTower(CellTower.from(BitUtil.to(mcc, 15), mnc, tac, cid));
+                } else {
+                    for (int i = 0; i < 3; i++) {
+                        int lac = header == 0x2727 ? buf.readUnsignedShort() : buf.readUnsignedShortLE();
+                        int cid = header == 0x2727 ? buf.readUnsignedShort() : buf.readUnsignedShortLE();
+                        network.addCellTower(CellTower.from(mcc, mnc, lac, cid));
+                    }
                 }
                 position.setNetwork(network);
+            } else if (header == 0x2626 || header == 0x2727) {
+                buf.skipBytes(12); // cell towers
             }
 
         }
@@ -345,15 +465,15 @@ public class T800xProtocolDecoder extends BaseProtocolDecoder {
             byte[] accelerationBytes = new byte[5];
             buf.readBytes(accelerationBytes);
             long acceleration = new BigInteger(accelerationBytes).longValue();
-            double accelerationZ = BitUtil.between(acceleration, 8, 15) + BitUtil.between(acceleration, 4, 8) * 0.1;
+            double accelerationZ = BitUtil.between(acceleration, 8, 15) + BitUtil.between(acceleration, 4, 8) / 10.0;
             if (!BitUtil.check(acceleration, 15)) {
                 accelerationZ = -accelerationZ;
             }
-            double accelerationY = BitUtil.between(acceleration, 20, 27) + BitUtil.between(acceleration, 16, 20) * 0.1;
+            double accelerationY = BitUtil.between(acceleration, 20, 27) + BitUtil.between(acceleration, 16, 20) / 10.0;
             if (!BitUtil.check(acceleration, 27)) {
                 accelerationY = -accelerationY;
             }
-            double accelerationX = BitUtil.between(acceleration, 28, 32) + BitUtil.between(acceleration, 32, 39) * 0.1;
+            double accelerationX = BitUtil.between(acceleration, 28, 32) + BitUtil.between(acceleration, 32, 39) / 10.0;
             if (!BitUtil.check(acceleration, 39)) {
                 accelerationX = -accelerationX;
             }
@@ -362,14 +482,15 @@ public class T800xProtocolDecoder extends BaseProtocolDecoder {
             int battery = BcdUtil.readInteger(buf, 2);
             position.set(Position.KEY_BATTERY_LEVEL, battery > 0 ? battery : 100);
             position.set(Position.KEY_DEVICE_TEMP, (int) buf.readByte());
-            position.set("lightSensor", BcdUtil.readInteger(buf, 2) * 0.1);
-            position.set(Position.KEY_BATTERY, BcdUtil.readInteger(buf, 2) * 0.1);
-            position.set("solarPanel", BcdUtil.readInteger(buf, 2) * 0.1);
+            position.set("lightSensor", BcdUtil.readInteger(buf, 2) / 10.0);
+            position.set(Position.KEY_BATTERY, BcdUtil.readInteger(buf, 2) / 10.0);
+            position.set("solarPanel", BcdUtil.readInteger(buf, 2) / 10.0);
             position.set(Position.KEY_ODOMETER, buf.readUnsignedInt());
 
             int inputStatus = buf.readUnsignedShort();
             position.set(Position.KEY_IGNITION, BitUtil.check(inputStatus, 2));
             position.set(Position.KEY_RSSI, BitUtil.between(inputStatus, 4, 11));
+            position.set(Position.KEY_INPUT, inputStatus);
 
             buf.readUnsignedShort(); // ignition on upload interval
             buf.readUnsignedInt(); // ignition off upload interval
@@ -377,13 +498,69 @@ public class T800xProtocolDecoder extends BaseProtocolDecoder {
             buf.readUnsignedShort(); // distance upload interval
             buf.readUnsignedByte(); // heartbeat
 
-        } else if (buf.readableBytes() >= 2) {
+        } else {
 
-            position.set(Position.KEY_POWER, BcdUtil.readInteger(buf, 4) * 0.01);
-
+            String model = getDeviceModel(deviceSession);
+            if ("TLW2-2BL".equals(model) || type == MSG_GPS_2 || type == MSG_ALARM_2) {
+                position.set(Position.KEY_BATTERY, BcdUtil.readInteger(buf, 4) / 100.0);
+            }
+            if (buf.readableBytes() >= 2) {
+                position.set(Position.KEY_POWER, BcdUtil.readInteger(buf, 4) / 100.0);
+            }
+            if (buf.readableBytes() >= 19) {
+                position.setSpeed(UnitsConverter.knotsFromKph(BcdUtil.readInteger(buf, 4) / 10.0));
+                long fuelUsed = buf.readUnsignedInt();
+                if (fuelUsed != 0xffffffffL) {
+                    position.set(Position.KEY_FUEL_USED, fuelUsed / 1000.0);
+                }
+                long fuelConsumption = buf.readUnsignedInt();
+                if (fuelConsumption != 0xffffffffL) {
+                    position.set(Position.KEY_FUEL_CONSUMPTION, fuelConsumption / 1000.0);
+                }
+                int value = buf.readUnsignedShort();
+                if (value != 0xffff) {
+                    position.set(Position.KEY_RPM, value);
+                }
+                value = buf.readUnsignedByte();
+                if (value != 0xff) {
+                    position.set("airInput", value);
+                }
+                value = buf.readUnsignedByte();
+                if (value != 0xff) {
+                    position.set("airPressure", value);
+                }
+                value = buf.readUnsignedByte();
+                if (value != 0xff) {
+                    position.set(Position.KEY_COOLANT_TEMP, value - 40);
+                }
+                value = buf.readUnsignedByte();
+                if (value != 0xff) {
+                    position.set("airTemp", value - 40);
+                }
+                value = buf.readUnsignedByte();
+                if (value != 0xff) {
+                    position.set(Position.KEY_ENGINE_LOAD, value);
+                }
+                value = buf.readUnsignedByte();
+                if (value != 0xff) {
+                    position.set(Position.KEY_THROTTLE, value);
+                }
+                value = buf.readUnsignedByte();
+                if (value != 0xff) {
+                    if (BitUtil.check(value, 7)) {
+                        position.set(Position.KEY_FUEL, BitUtil.to(value, 7));
+                    } else {
+                        position.set(Position.KEY_FUEL_LEVEL, value);
+                    }
+                }
+            }
         }
 
-        sendResponse(channel, header, type, index, imei, alarm);
+        boolean acknowledgement = AttributeUtil.lookup(
+                getCacheManager(), Keys.PROTOCOL_ACK.withPrefix(getProtocolName()), deviceSession.getDeviceId());
+        if (acknowledgement || type == MSG_ALARM || type == MSG_ALARM_2) {
+            sendResponse(channel, header, type, header == 0x2323 ? 1 : index, imei, alarm);
+        }
 
         return position;
     }

@@ -2,12 +2,12 @@ package org.traccar.helper;
 
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
-import org.junit.Test;
+import org.junit.jupiter.api.Test;
 
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 
-import static org.junit.Assert.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertEquals;
 
 public class ChecksumTest {
 
@@ -29,6 +29,14 @@ public class ChecksumTest {
         assertEquals(0x29b1, Checksum.crc16(Checksum.CRC16_CCITT_FALSE, buf.nioBuffer()));
         assertEquals(0x2189, Checksum.crc16(Checksum.CRC16_KERMIT, buf.nioBuffer()));
         assertEquals(0x31c3, Checksum.crc16(Checksum.CRC16_XMODEM, buf.nioBuffer()));
+    }
+
+    @Test
+    public void testCrc32() {
+        ByteBuf buf = Unpooled.copiedBuffer("123456789", StandardCharsets.US_ASCII);
+
+        assertEquals(0xcbf43926, Checksum.crc32(Checksum.CRC32_STANDARD, buf.nioBuffer()));
+        assertEquals(0x0376e6e7, Checksum.crc32(Checksum.CRC32_MPEG2, buf.nioBuffer()));
     }
 
     @Test

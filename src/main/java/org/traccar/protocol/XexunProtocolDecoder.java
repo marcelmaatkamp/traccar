@@ -17,14 +17,15 @@ package org.traccar.protocol;
 
 import io.netty.channel.Channel;
 import org.traccar.BaseProtocolDecoder;
-import org.traccar.DeviceSession;
 import org.traccar.Protocol;
 import org.traccar.helper.DateBuilder;
 import org.traccar.helper.Parser;
 import org.traccar.helper.PatternBuilder;
 import org.traccar.model.Position;
+import org.traccar.session.DeviceSession;
 
 import java.net.SocketAddress;
+import java.util.Locale;
 import java.util.regex.Pattern;
 
 public class XexunProtocolDecoder extends BaseProtocolDecoder {
@@ -65,33 +66,16 @@ public class XexunProtocolDecoder extends BaseProtocolDecoder {
             .any()
             .compile();
 
-    private String decodeStatus(Position position, String value) {
+    private void decodeStatus(Position position, String value) {
         if (value != null) {
-            switch (value.toLowerCase()) {
-                case "acc on":
-                case "accstart":
-                    position.set(Position.KEY_IGNITION, true);
-                    break;
-                case "acc off":
-                case "accstop":
-                    position.set(Position.KEY_IGNITION, false);
-                    break;
-                case "help me!":
-                case "help me":
-                    position.set(Position.KEY_ALARM, Position.ALARM_SOS);
-                    break;
-                case "low battery":
-                    position.set(Position.KEY_ALARM, Position.ALARM_LOW_BATTERY);
-                    break;
-                case "move!":
-                case "moved!":
-                    position.set(Position.KEY_ALARM, Position.ALARM_MOVEMENT);
-                    break;
-                default:
-                    break;
+            switch (value.toLowerCase(Locale.ROOT)) {
+                case "acc on", "accstart" -> position.set(Position.KEY_IGNITION, true);
+                case "acc off", "accstop" -> position.set(Position.KEY_IGNITION, false);
+                case "help me!", "help me" -> position.addAlarm(Position.ALARM_SOS);
+                case "low battery" -> position.addAlarm(Position.ALARM_LOW_BATTERY);
+                case "move!", "moved!" -> position.addAlarm(Position.ALARM_MOVEMENT);
             }
         }
-        return null;
     }
 
     @Override

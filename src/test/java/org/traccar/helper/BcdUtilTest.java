@@ -1,12 +1,12 @@
 package org.traccar.helper;
 
 import io.netty.buffer.Unpooled;
-import org.junit.Test;
+import org.junit.jupiter.api.Test;
 
-import static org.junit.Assert.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertEquals;
 
 public class BcdUtilTest {
-    
+
     @Test
     public void testReadInteger() {
         byte[] buf = {0x01, (byte) 0x90, 0x34};

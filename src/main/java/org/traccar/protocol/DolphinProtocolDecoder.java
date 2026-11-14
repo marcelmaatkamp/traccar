@@ -20,12 +20,12 @@ import io.netty.buffer.ByteBufUtil;
 import io.netty.buffer.Unpooled;
 import io.netty.channel.Channel;
 import org.traccar.BaseProtocolDecoder;
-import org.traccar.DeviceSession;
 import org.traccar.NetworkMessage;
 import org.traccar.Protocol;
 import org.traccar.helper.UnitsConverter;
 import org.traccar.model.Position;
 import org.traccar.protobuf.dolphin.Messages.DolphinMessages;
+import org.traccar.session.DeviceSession;
 
 import java.net.SocketAddress;
 import java.util.Date;
@@ -100,6 +100,10 @@ public class DolphinProtocolDecoder extends BaseProtocolDecoder {
 
                 position.set(Position.KEY_SATELLITES, point.getSatellites());
                 position.set(Position.KEY_HDOP, point.getHDOP());
+
+                for (int j = 0; j < point.getIOListIDCount(); j++) {
+                    position.set(Position.PREFIX_IO + point.getIOListIDValue(j), point.getIOListValue(j));
+                }
 
                 positions.add(position);
 

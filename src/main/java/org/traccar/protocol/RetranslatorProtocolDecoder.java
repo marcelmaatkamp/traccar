@@ -19,10 +19,11 @@ import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
 import io.netty.channel.Channel;
 import org.traccar.BaseProtocolDecoder;
-import org.traccar.DeviceSession;
 import org.traccar.NetworkMessage;
 import org.traccar.Protocol;
+import org.traccar.helper.UnitsConverter;
 import org.traccar.model.Position;
+import org.traccar.session.DeviceSession;
 
 import java.net.SocketAddress;
 import java.nio.charset.StandardCharsets;
@@ -63,7 +64,7 @@ public class RetranslatorProtocolDecoder extends BaseProtocolDecoder {
         while (buf.isReadable()) {
 
             buf.readUnsignedShort(); // block type
-            int blockEnd = buf.readInt() + buf.readerIndex();
+            int blockEnd = Math.toIntExact(buf.readUnsignedInt() + buf.readerIndex());
             buf.readUnsignedByte(); // security attribute
             int dataType = buf.readUnsignedByte();
 
@@ -76,27 +77,19 @@ public class RetranslatorProtocolDecoder extends BaseProtocolDecoder {
                 position.setLongitude(buf.readDoubleLE());
                 position.setLatitude(buf.readDoubleLE());
                 position.setAltitude(buf.readDoubleLE());
-                position.setSpeed(buf.readShort());
+                position.setSpeed(UnitsConverter.knotsFromKph(buf.readShort()));
                 position.setCourse(buf.readShort());
                 position.set(Position.KEY_SATELLITES, buf.readByte());
             } else {
                 switch (dataType) {
-                    case 1:
+                    case 1 -> {
                         int len = buf.indexOf(buf.readerIndex(), buf.writerIndex(), (byte) 0x00) - buf.readerIndex();
                         position.set(name, buf.readCharSequence(len, StandardCharsets.US_ASCII).toString());
                         buf.readByte();
-                        break;
-                    case 3:
-                        position.set(name, buf.readInt());
-                        break;
-                    case 4:
-                        position.set(name, buf.readDoubleLE());
-                        break;
-                    case 5:
-                        position.set(name, buf.readLong());
-                        break;
-                    default:
-                        break;
+                    }
+                    case 3 -> position.set(name, buf.readInt());
+                    case 4 -> position.set(name, buf.readDoubleLE());
+                    case 5 -> position.set(name, buf.readLong());
                 }
             }
 

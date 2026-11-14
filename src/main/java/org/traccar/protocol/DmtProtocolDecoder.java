@@ -1,5 +1,5 @@
 /*
- * Copyright 2017 - 2021 Anton Tananaev (anton@traccar.org)
+ * Copyright 2017 - 2024 Anton Tananaev (anton@traccar.org)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,16 +16,17 @@
 package org.traccar.protocol;
 
 import io.netty.buffer.ByteBuf;
+import io.netty.buffer.ByteBufUtil;
 import io.netty.buffer.Unpooled;
 import io.netty.channel.Channel;
 import org.traccar.BaseProtocolDecoder;
-import org.traccar.DeviceSession;
 import org.traccar.NetworkMessage;
 import org.traccar.Protocol;
 import org.traccar.helper.BitUtil;
 import org.traccar.helper.DateBuilder;
 import org.traccar.helper.UnitsConverter;
 import org.traccar.model.Position;
+import org.traccar.session.DeviceSession;
 
 import java.net.SocketAddress;
 import java.nio.charset.StandardCharsets;
@@ -54,7 +55,8 @@ public class DmtProtocolDecoder extends BaseProtocolDecoder {
     private void sendResponse(Channel channel, int type, ByteBuf content) {
         if (channel != null) {
             ByteBuf response = Unpooled.buffer();
-            response.writeByte(0x02); response.writeByte(0x55); // header
+            response.writeByte(0x02); // header
+            response.writeByte(0x55); // header
             response.writeByte(type);
             response.writeShortLE(content != null ? content.readableBytes() : 0);
             if (content != null) {
@@ -92,8 +94,8 @@ public class DmtProtocolDecoder extends BaseProtocolDecoder {
                     .setSecond((int) (time >> 26) & 0x3F)
                     .getDate());
 
-            position.setLongitude(buf.readIntLE() * 0.0000001);
-            position.setLatitude(buf.readIntLE() * 0.0000001);
+            position.setLongitude(buf.readIntLE() / 10000000.0);
+            position.setLatitude(buf.readIntLE() / 10000000.0);
             position.setSpeed(UnitsConverter.knotsFromCps(buf.readUnsignedShortLE()));
             position.setCourse(buf.readUnsignedByte() * 2);
             position.setAltitude(buf.readShortLE());
@@ -120,7 +122,7 @@ public class DmtProtocolDecoder extends BaseProtocolDecoder {
 
             buf.skipBytes(8); // device id
 
-            position.set(Position.KEY_PDOP, buf.readUnsignedShortLE() * 0.01);
+            position.set(Position.KEY_PDOP, buf.readUnsignedShortLE() / 100.0);
 
             buf.skipBytes(2); // reserved
 
@@ -151,7 +153,9 @@ public class DmtProtocolDecoder extends BaseProtocolDecoder {
 
             position.setDeviceTime(new Date(1356998400000L + buf.readUnsignedIntLE() * 1000)); // since 1 Jan 2013
 
-            position.set(Position.KEY_EVENT, buf.readUnsignedByte());
+            int event = buf.readUnsignedByte();
+            position.addAlarm(decodeAlarm(event));
+            position.set(Position.KEY_EVENT, event);
 
             while (buf.readerIndex() < recordEnd) {
 
@@ -162,8 +166,8 @@ public class DmtProtocolDecoder extends BaseProtocolDecoder {
                 if (fieldId == 0) {
 
                     position.setFixTime(new Date(1356998400000L + buf.readUnsignedIntLE() * 1000));
-                    position.setLatitude(buf.readIntLE() * 0.0000001);
-                    position.setLongitude(buf.readIntLE() * 0.0000001);
+                    position.setLatitude(buf.readIntLE() / 10000000.0);
+                    position.setLongitude(buf.readIntLE() / 10000000.0);
                     position.setAltitude(buf.readShortLE());
                     position.setSpeed(UnitsConverter.knotsFromCps(buf.readUnsignedShortLE()));
 
@@ -171,7 +175,7 @@ public class DmtProtocolDecoder extends BaseProtocolDecoder {
 
                     position.setCourse(buf.readUnsignedByte() * 2);
 
-                    position.set(Position.KEY_PDOP, buf.readUnsignedByte() * 0.1);
+                    position.set(Position.KEY_PDOP, buf.readUnsignedByte() / 10.0);
 
                     position.setAccuracy(buf.readUnsignedByte());
                     position.setValid(buf.readUnsignedByte() != 0);
@@ -184,39 +188,41 @@ public class DmtProtocolDecoder extends BaseProtocolDecoder {
 
                     position.set(Position.KEY_IGNITION, BitUtil.check(input, 0));
 
-                    if (!BitUtil.check(input, 1)) {
-                        position.set(Position.KEY_ALARM, Position.ALARM_LOW_BATTERY);
-                    } else if (BitUtil.check(input, 6)) {
-                        position.set(Position.KEY_ALARM, Position.ALARM_TAMPERING);
+                    if (!BitUtil.check(status, 1)) {
+                        position.addAlarm(Position.ALARM_LOW_BATTERY);
+                    } else if (BitUtil.check(status, 6)) {
+                        position.addAlarm(Position.ALARM_TAMPERING);
                     }
 
                     position.set(Position.KEY_INPUT, input);
                     position.set(Position.KEY_OUTPUT, output);
                     position.set(Position.KEY_STATUS, status);
 
+                } else if (fieldId == 3) {
+
+                    int driverIdType = buf.readUnsignedByte();
+                    String driverId = switch (driverIdType) {
+                        case 1 -> ByteBufUtil.hexDump(buf.readSlice(5));
+                        case 2 -> ByteBufUtil.hexDump(buf.readSlice(6));
+                        case 3 -> buf.readCharSequence(4, StandardCharsets.US_ASCII).toString();
+                        case 4 -> buf.readCharSequence(5, StandardCharsets.US_ASCII).toString();
+                        case 5, 6 -> buf.readCharSequence(fieldLength - 1, StandardCharsets.US_ASCII).toString();
+                        case 7 -> ByteBufUtil.hexDump(buf.readSlice(fieldLength - 1));
+                        default -> null;
+                    };
+                    position.set(Position.KEY_DRIVER_UNIQUE_ID, driverId);
+
                 } else if (fieldId == 6) {
 
                     while (buf.readerIndex() < fieldEnd) {
                         int number = buf.readUnsignedByte();
                         switch (number) {
-                            case 1:
-                                position.set(Position.KEY_BATTERY, buf.readUnsignedShortLE() * 0.001);
-                                break;
-                            case 2:
-                                position.set(Position.KEY_POWER, buf.readUnsignedShortLE() * 0.01);
-                                break;
-                            case 3:
-                                position.set(Position.KEY_DEVICE_TEMP, buf.readShortLE() * 0.01);
-                                break;
-                            case 4:
-                                position.set(Position.KEY_RSSI, buf.readUnsignedShortLE());
-                                break;
-                            case 5:
-                                position.set("solarPower", buf.readUnsignedShortLE() * 0.001);
-                                break;
-                            default:
-                                position.set(Position.PREFIX_IO + number, buf.readUnsignedShortLE());
-                                break;
+                            case 1 -> position.set(Position.KEY_BATTERY, buf.readUnsignedShortLE() / 1000.0);
+                            case 2 -> position.set(Position.KEY_POWER, buf.readUnsignedShortLE() / 100.0);
+                            case 3 -> position.set(Position.KEY_DEVICE_TEMP, buf.readShortLE() / 100.0);
+                            case 4 -> position.set(Position.KEY_RSSI, buf.readUnsignedShortLE());
+                            case 5 -> position.set("solarPower", buf.readUnsignedShortLE() / 1000.0);
+                            default -> position.set(Position.PREFIX_IO + number, buf.readUnsignedShortLE());
                         }
                     }
 
@@ -244,6 +250,21 @@ public class DmtProtocolDecoder extends BaseProtocolDecoder {
         }
 
         return positions;
+    }
+
+    private String decodeAlarm(int value) {
+        return switch (value) {
+            case 12 -> Position.ALARM_BRAKING;
+            case 13 -> Position.ALARM_ACCELERATION;
+            case 14 -> Position.ALARM_CORNERING;
+            case 18 -> Position.ALARM_OVERSPEED;
+            case 20 -> Position.ALARM_TOW;
+            case 23 -> Position.ALARM_ACCIDENT;
+            case 29 -> Position.ALARM_TAMPERING;
+            case 44 -> Position.ALARM_GEOFENCE_ENTER;
+            case 45 -> Position.ALARM_GEOFENCE_EXIT;
+            default -> null;
+        };
     }
 
     @Override

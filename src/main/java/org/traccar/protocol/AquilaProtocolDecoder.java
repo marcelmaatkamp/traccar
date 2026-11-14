@@ -17,12 +17,12 @@ package org.traccar.protocol;
 
 import io.netty.channel.Channel;
 import org.traccar.BaseProtocolDecoder;
-import org.traccar.DeviceSession;
 import org.traccar.Protocol;
 import org.traccar.helper.Parser;
 import org.traccar.helper.PatternBuilder;
 import org.traccar.helper.UnitsConverter;
 import org.traccar.model.Position;
+import org.traccar.session.DeviceSession;
 
 import java.net.SocketAddress;
 import java.util.regex.Pattern;
@@ -164,7 +164,7 @@ public class AquilaProtocolDecoder extends BaseProtocolDecoder {
 
         if (parser.hasNext(9)) {
 
-            position.set(Position.KEY_FUEL_LEVEL, parser.nextInt());
+            position.set(Position.KEY_FUEL, parser.nextInt());
             position.set(Position.PREFIX_IN + 1, parser.next());
             position.set(Position.KEY_CHARGE, parser.next().equals("1"));
             position.set(Position.PREFIX_IN + 2, parser.next());

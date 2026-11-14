@@ -20,12 +20,12 @@ import io.netty.buffer.ByteBufUtil;
 import io.netty.buffer.Unpooled;
 import io.netty.channel.Channel;
 import org.traccar.BaseProtocolDecoder;
-import org.traccar.DeviceSession;
 import org.traccar.NetworkMessage;
 import org.traccar.Protocol;
 import org.traccar.helper.Checksum;
 import org.traccar.helper.UnitsConverter;
 import org.traccar.model.Position;
+import org.traccar.session.DeviceSession;
 
 import java.net.SocketAddress;
 import java.util.Date;
@@ -51,8 +51,8 @@ public class AutoTrackProtocolDecoder extends BaseProtocolDecoder {
         position.setDeviceId(deviceSession.getDeviceId());
 
         position.setTime(new Date(1009843200000L + buf.readUnsignedIntLE() * 1000)); // seconds since 2002
-        position.setLatitude(buf.readIntLE() * 0.0000001);
-        position.setLongitude(buf.readIntLE() * 0.0000001);
+        position.setLatitude(buf.readIntLE() / 10000000.0);
+        position.setLongitude(buf.readIntLE() / 10000000.0);
 
         position.set(Position.KEY_ODOMETER, buf.readUnsignedIntLE());
         position.set(Position.KEY_FUEL_USED, buf.readUnsignedIntLE());
@@ -101,10 +101,11 @@ public class AutoTrackProtocolDecoder extends BaseProtocolDecoder {
         int type = buf.readUnsignedByte();
         buf.readUnsignedShortLE(); // length
 
+        DeviceSession deviceSession;
         switch (type) {
-            case MSG_LOGIN_REQUEST:
+            case MSG_LOGIN_REQUEST -> {
                 String imei = ByteBufUtil.hexDump(buf.readSlice(8));
-                DeviceSession deviceSession = getDeviceSession(channel, remoteAddress, imei);
+                deviceSession = getDeviceSession(channel, remoteAddress, imei);
                 if (deviceSession == null) {
                     return null;
                 }
@@ -122,16 +123,17 @@ public class AutoTrackProtocolDecoder extends BaseProtocolDecoder {
                     channel.writeAndFlush(new NetworkMessage(response, remoteAddress));
                 }
                 return null;
-            case MSG_TELEMETRY_1:
-            case MSG_TELEMETRY_2:
-            case MSG_TELEMETRY_3:
+            }
+            case MSG_TELEMETRY_1, MSG_TELEMETRY_2, MSG_TELEMETRY_3 -> {
                 deviceSession = getDeviceSession(channel, remoteAddress);
                 if (deviceSession == null) {
                     return null;
                 }
                 return decodeTelemetry(channel, remoteAddress, deviceSession, buf);
-            default:
+            }
+            default -> {
                 return null;
+            }
         }
     }
 

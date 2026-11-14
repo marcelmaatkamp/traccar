@@ -17,7 +17,6 @@ package org.traccar.protocol;
 
 import io.netty.channel.Channel;
 import org.traccar.BaseProtocolDecoder;
-import org.traccar.DeviceSession;
 import org.traccar.NetworkMessage;
 import org.traccar.Protocol;
 import org.traccar.helper.Parser;
@@ -26,15 +25,18 @@ import org.traccar.helper.UnitsConverter;
 import org.traccar.model.CellTower;
 import org.traccar.model.Network;
 import org.traccar.model.Position;
+import org.traccar.session.DeviceSession;
 
 import java.net.SocketAddress;
-import java.text.DateFormat;
-import java.text.SimpleDateFormat;
-import java.util.Date;
-import java.util.TimeZone;
+import java.time.Instant;
+import java.time.ZoneOffset;
+import java.time.format.DateTimeFormatter;
 import java.util.regex.Pattern;
 
 public class ItsProtocolDecoder extends BaseProtocolDecoder {
+
+    private static final DateTimeFormatter DATE_FORMAT = DateTimeFormatter
+            .ofPattern("ddMMyyyyHHmmss").withZone(ZoneOffset.UTC);
 
     public ItsProtocolDecoder(Protocol protocol) {
         super(protocol);
@@ -116,29 +118,18 @@ public class ItsProtocolDecoder extends BaseProtocolDecoder {
             .compile();
 
     private String decodeAlarm(String status) {
-        switch (status) {
-            case "WD":
-            case "EA":
-                return Position.ALARM_SOS;
-            case "BL":
-                return Position.ALARM_LOW_BATTERY;
-            case "HB":
-                return Position.ALARM_BRAKING;
-            case "HA":
-                return Position.ALARM_ACCELERATION;
-            case "RT":
-                return Position.ALARM_CORNERING;
-            case "OS":
-                return Position.ALARM_OVERSPEED;
-            case "TA":
-                return Position.ALARM_TAMPERING;
-            case "BD":
-                return Position.ALARM_POWER_CUT;
-            case "BR":
-                return Position.ALARM_POWER_RESTORED;
-            default:
-                return null;
-        }
+        return switch (status) {
+            case "WD", "EA" -> Position.ALARM_SOS;
+            case "BL" -> Position.ALARM_LOW_BATTERY;
+            case "HB" -> Position.ALARM_BRAKING;
+            case "HA" -> Position.ALARM_ACCELERATION;
+            case "RT" -> Position.ALARM_CORNERING;
+            case "OS" -> Position.ALARM_OVERSPEED;
+            case "TA" -> Position.ALARM_TAMPERING;
+            case "BD" -> Position.ALARM_POWER_CUT;
+            case "BR" -> Position.ALARM_POWER_RESTORED;
+            default -> null;
+        };
     }
 
     @Override
@@ -151,9 +142,7 @@ public class ItsProtocolDecoder extends BaseProtocolDecoder {
             if (sentence.startsWith("$,01,")) {
                 channel.writeAndFlush(new NetworkMessage("$,1,*", remoteAddress));
             } else if (sentence.startsWith("$,LGN,")) {
-                DateFormat dateFormat = new SimpleDateFormat("ddMMyyyyHHmmss");
-                dateFormat.setTimeZone(TimeZone.getTimeZone("GMT"));
-                String time = dateFormat.format(new Date());
+                String time = DATE_FORMAT.format(Instant.now());
                 channel.writeAndFlush(new NetworkMessage("$LGN" + time + "*", remoteAddress));
             } else if (sentence.startsWith("$,HBT,")) {
                 channel.writeAndFlush(new NetworkMessage("$HBT*", remoteAddress));
@@ -179,7 +168,7 @@ public class ItsProtocolDecoder extends BaseProtocolDecoder {
         position.setDeviceId(deviceSession.getDeviceId());
 
         if (type != null && type.equals("EMR")) {
-            position.set(Position.KEY_ALARM, Position.ALARM_SOS);
+            position.addAlarm(Position.ALARM_SOS);
         }
 
         if (event != null) {
@@ -198,14 +187,15 @@ public class ItsProtocolDecoder extends BaseProtocolDecoder {
             } else if (status.equals("IF")) {
                 position.set(Position.KEY_IGNITION, false);
             } else {
-                position.set(Position.KEY_ALARM, decodeAlarm(status));
+                position.addAlarm(decodeAlarm(status));
             }
         }
 
         if (parser.hasNext()) {
             position.setValid(parser.nextInt() == 1);
         }
-        position.setTime(parser.nextDateTime(Parser.DateTimeFormat.DMY_HMS));
+        position.setTime(parser.nextDateTime(
+                Parser.DateTimeFormat.DMY_HMS, getTimeZone(deviceSession.getDeviceId()).getID()));
         if (parser.hasNext()) {
             position.setValid(parser.next().matches("[1A]"));
         }

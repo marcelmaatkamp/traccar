@@ -1,5 +1,5 @@
 /*
- * Copyright 2012 - 2021 Anton Tananaev (anton@traccar.org)
+ * Copyright 2012 - 2026 Anton Tananaev (anton@traccar.org)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -20,35 +20,33 @@ import io.netty.buffer.ByteBufUtil;
 import io.netty.buffer.Unpooled;
 import io.netty.channel.Channel;
 import org.traccar.BaseProtocolDecoder;
-import org.traccar.Context;
-import org.traccar.DeviceSession;
 import org.traccar.NetworkMessage;
 import org.traccar.Protocol;
 import org.traccar.helper.BcdUtil;
 import org.traccar.helper.BitUtil;
+import org.traccar.helper.BufferUtil;
 import org.traccar.helper.Checksum;
 import org.traccar.helper.DateBuilder;
 import org.traccar.helper.Parser;
 import org.traccar.helper.PatternBuilder;
+import org.traccar.helper.StringUtil;
 import org.traccar.helper.UnitsConverter;
 import org.traccar.model.CellTower;
-import org.traccar.model.Device;
 import org.traccar.model.Network;
 import org.traccar.model.Position;
 import org.traccar.model.WifiAccessPoint;
+import org.traccar.session.DeviceSession;
 
 import java.net.SocketAddress;
 import java.nio.charset.StandardCharsets;
 import java.util.Calendar;
 import java.util.Date;
-import java.util.HashMap;
-import java.util.Map;
+import java.util.Locale;
+import java.util.Set;
 import java.util.TimeZone;
 import java.util.regex.Pattern;
 
 public class Gt06ProtocolDecoder extends BaseProtocolDecoder {
-
-    private final Map<Integer, ByteBuf> photos = new HashMap<>();
 
     public Gt06ProtocolDecoder(Protocol protocol) {
         super(protocol);
@@ -56,124 +54,208 @@ public class Gt06ProtocolDecoder extends BaseProtocolDecoder {
 
     public static final int MSG_LOGIN = 0x01;
     public static final int MSG_GPS = 0x10;
-    public static final int MSG_LBS = 0x11;
+    public static final int MSG_GPS_LBS_6 = 0x11;
     public static final int MSG_GPS_LBS_1 = 0x12;
     public static final int MSG_GPS_LBS_2 = 0x22;
+    public static final int MSG_GPS_LBS_DRIVER = 0x25;     // XT40
     public static final int MSG_GPS_LBS_3 = 0x37;
+    public static final int MSG_GPS_LBS_4 = 0x2D;
     public static final int MSG_STATUS = 0x13;
     public static final int MSG_SATELLITE = 0x14;
     public static final int MSG_STRING = 0x15;
     public static final int MSG_GPS_LBS_STATUS_1 = 0x16;
     public static final int MSG_WIFI = 0x17;
+    public static final int MSG_GPS_LBS_RFID = 0x17;
+    public static final int MSG_LBS_ADDRESS_REQUEST = 0x17;
     public static final int MSG_GPS_LBS_STATUS_2 = 0x26;
     public static final int MSG_GPS_LBS_STATUS_3 = 0x27;
-    public static final int MSG_LBS_MULTIPLE = 0x28;
+    public static final int MSG_LBS_MULTIPLE_1 = 0x28;
+    public static final int MSG_LBS_MULTIPLE_2 = 0x2E;
+    public static final int MSG_LBS_MULTIPLE_3 = 0x24;
     public static final int MSG_LBS_WIFI = 0x2C;
     public static final int MSG_LBS_EXTEND = 0x18;
     public static final int MSG_LBS_STATUS = 0x19;
     public static final int MSG_GPS_PHONE = 0x1A;
-    public static final int MSG_GPS_LBS_EXTEND = 0x1E;
-    public static final int MSG_HEARTBEAT = 0x23;
-    public static final int MSG_ADDRESS_REQUEST = 0x2A;
-    public static final int MSG_ADDRESS_RESPONSE = 0x97;
-    public static final int MSG_AZ735_GPS = 0x32;
-    public static final int MSG_AZ735_ALARM = 0x33;
+    public static final int MSG_GPS_LBS_EXTEND = 0x1E;     // JI09
+    public static final int MSG_HEARTBEAT = 0x23;          // GK310
+    public static final int MSG_ADDRESS_REQUEST = 0x2A;    // GK310
+    public static final int MSG_ADDRESS_RESPONSE = 0x97;   // GK310
+    public static final int MSG_GPS_LBS_5 = 0x31;          // AZ735 & SL4X
+    public static final int MSG_GPS_LBS_STATUS_4 = 0x32;   // AZ735 & SL4X
+    public static final int MSG_WIFI_5 = 0x33;             // AZ735 & SL4X
+    public static final int MSG_LBS_3 = 0x34;              // SL4X
+    public static final int MSG_AZ735_GPS = 0x32;          // AZ735 (extended)
+    public static final int MSG_AZ735_ALARM = 0x33;        // AZ735 (only extended)
     public static final int MSG_X1_GPS = 0x34;
     public static final int MSG_X1_PHOTO_INFO = 0x35;
     public static final int MSG_X1_PHOTO_DATA = 0x36;
+    public static final int MSG_LOCATION_RFID = 0x36;      // TRX16i
+    public static final int MSG_STATUS_2 = 0x36;           // Jimi IoT 4G
+    public static final int MSG_ALARM_MODULE = 0x39;       // Jimi IoT 4G
+    public static final int MSG_WIFI_ALARM = 0xA9;         // Jimi IoT 4G
+    public static final int MSG_ATTENDANCE = 0xB0;         // Jimi IoT 4G
+    public static final int MSG_BLUETOOTH_CLOCK = 0xB2;    // Jimi IoT 4G
+    public static final int MSG_DEVICE_STATUS = 0xF1;      // Jimi IoT 4G
     public static final int MSG_WIFI_2 = 0x69;
     public static final int MSG_GPS_MODULAR = 0x70;
     public static final int MSG_WIFI_4 = 0xF3;
     public static final int MSG_COMMAND_0 = 0x80;
     public static final int MSG_COMMAND_1 = 0x81;
     public static final int MSG_COMMAND_2 = 0x82;
-    public static final int MSG_TIME_REQUEST = 0x8A;
+    public static final int MSG_TIME_REQUEST = 0x8A;       // GK310
     public static final int MSG_INFO = 0x94;
     public static final int MSG_SERIAL = 0x9B;
     public static final int MSG_STRING_INFO = 0x21;
-    public static final int MSG_GPS_2 = 0xA0;
-    public static final int MSG_LBS_2 = 0xA1;
-    public static final int MSG_WIFI_3 = 0xA2;
-    public static final int MSG_FENCE_SINGLE = 0xA3;
-    public static final int MSG_FENCE_MULTI = 0xA4;
-    public static final int MSG_LBS_ALARM = 0xA5;
-    public static final int MSG_LBS_ADDRESS = 0xA7;
-    public static final int MSG_OBD = 0x8C;
-    public static final int MSG_DTC = 0x65;
-    public static final int MSG_PID = 0x66;
-    public static final int MSG_BMS = 0x20;
-    public static final int MSG_MULTIMEDIA = 0x21;
-    public static final int MSG_BMS_2 = 0x40;
-    public static final int MSG_MULTIMEDIA_2 = 0x41;
-    public static final int MSG_ALARM = 0x95;
+    public static final int MSG_GPS_LBS_7 = 0xA0;          // GK310 & JM-VL03
+    public static final int MSG_LBS_2 = 0xA1;              // GK310
+    public static final int MSG_WIFI_3 = 0xA2;             // GK310
+    public static final int MSG_GPS_LBS_STATUS_5 = 0xA2;   // LWxG
+    public static final int MSG_FENCE_SINGLE = 0xA3;       // GK310
+    public static final int MSG_FENCE_MULTI = 0xA4;        // GK310 & JM-LL301
+    public static final int MSG_LBS_ALARM = 0xA5;          // GK310 & JM-LL301
+    public static final int MSG_LBS_ADDRESS = 0xA7;        // GK310
+    public static final int MSG_OBD = 0x8C;                // FM08ABC
+    public static final int MSG_DTC = 0x65;                // FM08ABC
+    public static final int MSG_PID = 0x66;                // FM08ABC
+    public static final int MSG_BMS = 0x40;                // WD-209
+    public static final int MSG_MULTIMEDIA = 0x41;         // WD-209
+    public static final int MSG_ALARM = 0x95;              // JC100
+    public static final int MSG_PERIPHERAL = 0xF2;         // VL842
+    public static final int MSG_STATUS_3 = 0xA3;           // GL21L
+    public static final int MSG_GPS_LBS_8 = 0x38;
+    public static final int MSG_IBUTTON = 0x61;
 
-    private static boolean isSupported(int type) {
-        return hasGps(type) || hasLbs(type) || hasStatus(type);
+    private static final Set<String> NT_MODELS = Set.of("NT11", "NT20", "NT26", "NT40", "NT46", "VL100", "XT40");
+    private static final Set<String> VL_MODELS = Set.of("VL103", "LL303", "VL512", "G18");
+
+    private enum Variant {
+        VXT01,
+        WANWAY_S20,
+        SR411_MINI,
+        GT06E_CARD,
+        BENWAY,
+        S5,
+        SPACE10X,
+        STANDARD,
+        OBD6,
+        WETRUST,
+        JC400,
+        SL4X,
+        SEEWORLD,
+        RFID,
+        LW4G,
+        TRX16I,
     }
 
-    private static boolean hasGps(int type) {
+    private Variant variant;
+
+    private static final Pattern PATTERN_FUEL = new PatternBuilder()
+            .text("!AIOIL,")
+            .number("d+,")                       // device address
+            .number("d+.d+,")                    // output value
+            .number("(d+.d+),")                  // temperature
+            .expression("[^,]+,")                // version
+            .number("dd")                        // back wave
+            .number("d")                         // software status code
+            .number("d,")                        // hardware status code
+            .number("(d+.d+),")                  // measured value
+            .expression("[01],")                 // movement status
+            .number("d+,")                       // excited wave times
+            .number("xx")                        // checksum
+            .compile();
+
+    private static final Pattern PATTERN_LOCATION = new PatternBuilder()
+            .text("Current position!")
+            .number("Lat:([NS])(d+.d+),")        // latitude
+            .number("Lon:([EW])(d+.d+),")        // longitude
+            .text("Course:").number("(d+.d+),")  // course
+            .text("Speed:").number("(d+.d+),")   // speed
+            .text("DateTime:")
+            .number("(dddd)-(dd)-(dd) +")        // date
+            .number("(dd):(dd):(dd)")            // time
+            .compile();
+
+    private boolean isSupported(int type, String model) {
+        return hasGps(type) || hasLbs(type) || hasStatus(type, model);
+    }
+
+    private boolean hasGps(int type) {
         switch (type) {
             case MSG_GPS:
             case MSG_GPS_LBS_1:
             case MSG_GPS_LBS_2:
+            case MSG_GPS_LBS_DRIVER:
             case MSG_GPS_LBS_3:
+            case MSG_GPS_LBS_4:
+            case MSG_GPS_LBS_5:
+            case MSG_GPS_LBS_6:
             case MSG_GPS_LBS_STATUS_1:
             case MSG_GPS_LBS_STATUS_2:
             case MSG_GPS_LBS_STATUS_3:
+            case MSG_GPS_LBS_STATUS_4:
+            case MSG_GPS_LBS_STATUS_5:
             case MSG_GPS_PHONE:
             case MSG_GPS_LBS_EXTEND:
-            case MSG_GPS_2:
-            case MSG_FENCE_SINGLE:
+            case MSG_GPS_LBS_7:
+            case MSG_GPS_LBS_RFID:
             case MSG_FENCE_MULTI:
+            case MSG_ALARM_MODULE:
                 return true;
+            case 0xA3: // MSG_FENCE_SINGLE / MSG_STATUS_3
+                return variant != Variant.SEEWORLD;
             default:
                 return false;
         }
     }
 
-    private static boolean hasLbs(int type) {
+    private boolean hasLbs(int type) {
         switch (type) {
-            case MSG_LBS:
             case MSG_LBS_STATUS:
             case MSG_GPS_LBS_1:
             case MSG_GPS_LBS_2:
+            case MSG_GPS_LBS_DRIVER:
             case MSG_GPS_LBS_3:
+            case MSG_GPS_LBS_4:
+            case MSG_GPS_LBS_5:
+            case MSG_GPS_LBS_6:
             case MSG_GPS_LBS_STATUS_1:
             case MSG_GPS_LBS_STATUS_2:
             case MSG_GPS_LBS_STATUS_3:
-            case MSG_GPS_2:
-            case MSG_FENCE_SINGLE:
+            case MSG_GPS_LBS_STATUS_4:
+            case MSG_GPS_LBS_STATUS_5:
+            case MSG_GPS_LBS_7:
+            case MSG_GPS_LBS_RFID:
             case MSG_FENCE_MULTI:
+            case MSG_ALARM_MODULE:
             case MSG_LBS_ALARM:
             case MSG_LBS_ADDRESS:
                 return true;
+            case 0xA3: // MSG_FENCE_SINGLE / MSG_STATUS_3
+                return variant != Variant.SEEWORLD;
             default:
                 return false;
         }
     }
 
-    private static boolean hasStatus(int type) {
+    private boolean hasStatus(int type, String model) {
         switch (type) {
             case MSG_STATUS:
+            case MSG_STATUS_2:
             case MSG_LBS_STATUS:
             case MSG_GPS_LBS_STATUS_1:
             case MSG_GPS_LBS_STATUS_2:
             case MSG_GPS_LBS_STATUS_3:
-                return true;
-            default:
-                return false;
-        }
-    }
-
-    private static boolean hasLanguage(int type) {
-        switch (type) {
-            case MSG_GPS_PHONE:
-            case MSG_HEARTBEAT:
-            case MSG_GPS_LBS_STATUS_3:
-            case MSG_LBS_MULTIPLE:
-            case MSG_LBS_2:
+            case MSG_GPS_LBS_STATUS_4:
+            case MSG_GPS_LBS_STATUS_5:
             case MSG_FENCE_MULTI:
+            case MSG_ALARM_MODULE:
+            case MSG_LBS_ALARM:
                 return true;
+            case MSG_GPS_LBS_2:
+            case MSG_GPS_LBS_DRIVER:
+                return model != null && NT_MODELS.contains(model.toUpperCase(Locale.ROOT));
+            case 0xA3: // MSG_FENCE_SINGLE / MSG_STATUS_3
+                return variant == Variant.SEEWORLD;
             default:
                 return false;
         }
@@ -205,7 +287,7 @@ public class Gt06ProtocolDecoder extends BaseProtocolDecoder {
     }
 
     private void sendPhotoRequest(Channel channel, int pictureId) {
-        ByteBuf photo = photos.get(pictureId);
+        ByteBuf photo = getMediaBuffer();
         ByteBuf content = Unpooled.buffer();
         content.writeInt(pictureId);
         content.writeInt(photo.writerIndex());
@@ -214,12 +296,12 @@ public class Gt06ProtocolDecoder extends BaseProtocolDecoder {
     }
 
     public static boolean decodeGps(Position position, ByteBuf buf, boolean hasLength, TimeZone timezone) {
-        return decodeGps(position, buf, hasLength, true, true, timezone);
+        return decodeGps(position, buf, hasLength, true, true, false, false, timezone);
     }
 
     public static boolean decodeGps(
             Position position, ByteBuf buf, boolean hasLength, boolean hasSatellites,
-            boolean hasSpeed, TimeZone timezone) {
+            boolean hasSpeed, boolean longSpeed, boolean swapFlags, TimeZone timezone) {
 
         DateBuilder dateBuilder = new DateBuilder(timezone)
                 .setDate(buf.readUnsignedByte(), buf.readUnsignedByte(), buf.readUnsignedByte())
@@ -237,11 +319,18 @@ public class Gt06ProtocolDecoder extends BaseProtocolDecoder {
         double latitude = buf.readUnsignedInt() / 60.0 / 30000.0;
         double longitude = buf.readUnsignedInt() / 60.0 / 30000.0;
 
+        int flags = 0;
+        if (swapFlags) {
+            flags = buf.readUnsignedShort();
+        }
         if (hasSpeed) {
-            position.setSpeed(UnitsConverter.knotsFromKph(buf.readUnsignedByte()));
+            position.setSpeed(UnitsConverter.knotsFromKph(
+                    longSpeed ? buf.readUnsignedShort() : buf.readUnsignedByte()));
+        }
+        if (!swapFlags) {
+            flags = buf.readUnsignedShort();
         }
 
-        int flags = buf.readUnsignedShort();
         position.setCourse(BitUtil.to(flags, 10));
         position.setValid(BitUtil.check(flags, 12));
 
@@ -262,7 +351,7 @@ public class Gt06ProtocolDecoder extends BaseProtocolDecoder {
         return true;
     }
 
-    private boolean decodeLbs(Position position, ByteBuf buf, boolean hasLength) {
+    private boolean decodeLbs(Position position, ByteBuf buf, int type, boolean hasLength) {
 
         int length = 0;
         if (hasLength) {
@@ -282,11 +371,38 @@ public class Gt06ProtocolDecoder extends BaseProtocolDecoder {
             }
         }
 
+        boolean shortLbs = type == MSG_GPS_LBS_6 && buf.readableBytes() == 14;
+        int cellType = type == MSG_GPS_LBS_8 || type == MSG_ALARM_MODULE ? buf.readUnsignedByte() : 0;
         int mcc = buf.readUnsignedShort();
-        int mnc = BitUtil.check(mcc, 15) ? buf.readUnsignedShort() : buf.readUnsignedByte();
+        int mnc;
+        if (BitUtil.check(mcc, 15) || (type == MSG_GPS_LBS_6 && !shortLbs) || variant == Variant.SL4X) {
+            mnc = buf.readUnsignedShort();
+        } else {
+            mnc = buf.readUnsignedByte();
+        }
+        int lac;
+        if (cellType >= 3 || type == MSG_LBS_ALARM || type == MSG_GPS_LBS_7 || type == MSG_GPS_LBS_STATUS_5) {
+            lac = buf.readInt();
+        } else {
+            lac = buf.readUnsignedShort();
+        }
+        long cid;
+        if (cellType >= 3 || type == MSG_LBS_ALARM || type == MSG_GPS_LBS_7 || variant == Variant.SL4X
+                || type == MSG_GPS_LBS_STATUS_5) {
+            cid = buf.readLong();
+        } else if ((type == MSG_GPS_LBS_6 && !shortLbs) || type == MSG_IBUTTON || type == MSG_GPS_LBS_DRIVER
+                || variant == Variant.SEEWORLD || (variant == Variant.TRX16I && type == MSG_LOCATION_RFID)) {
+            cid = buf.readUnsignedInt();
+        } else {
+            cid = buf.readUnsignedMedium();
+        }
+        if (cellType >= 3) {
+            buf.readUnsignedShort(); // rssi
+        } else if (type == MSG_GPS_LBS_8 || type == MSG_ALARM_MODULE) {
+            buf.readUnsignedByte(); // rssi
+        }
 
-        position.setNetwork(new Network(CellTower.from(
-                BitUtil.to(mcc, 15), mnc, buf.readUnsignedShort(), buf.readUnsignedMedium())));
+        position.setNetwork(new Network(CellTower.from(BitUtil.to(mcc, 15), mnc, lac, cid)));
 
         if (length > 9) {
             buf.skipBytes(length - 9);
@@ -295,7 +411,7 @@ public class Gt06ProtocolDecoder extends BaseProtocolDecoder {
         return true;
     }
 
-    private boolean decodeStatus(Position position, ByteBuf buf) {
+    private void decodeStatus(Position position, ByteBuf buf) {
 
         int status = buf.readUnsignedByte();
 
@@ -306,141 +422,103 @@ public class Gt06ProtocolDecoder extends BaseProtocolDecoder {
 
         switch (BitUtil.between(status, 3, 6)) {
             case 1:
-                position.set(Position.KEY_ALARM, Position.ALARM_SHOCK);
+                position.addAlarm(Position.ALARM_VIBRATION);
                 break;
             case 2:
-                position.set(Position.KEY_ALARM, Position.ALARM_POWER_CUT);
+                position.addAlarm(Position.ALARM_POWER_CUT);
                 break;
             case 3:
-                position.set(Position.KEY_ALARM, Position.ALARM_LOW_BATTERY);
+                position.addAlarm(Position.ALARM_LOW_BATTERY);
                 break;
             case 4:
-                position.set(Position.KEY_ALARM, Position.ALARM_SOS);
+                position.addAlarm(Position.ALARM_SOS);
+                break;
+            case 6:
+                position.addAlarm(Position.ALARM_GEOFENCE);
                 break;
             case 7:
-                position.set(Position.KEY_ALARM, Position.ALARM_REMOVING);
+                if (variant == Variant.VXT01) {
+                    position.addAlarm(Position.ALARM_OVERSPEED);
+                } else {
+                    position.addAlarm(Position.ALARM_REMOVING);
+                }
                 break;
             default:
                 break;
         }
-
-        position.set(Position.KEY_BATTERY_LEVEL, buf.readUnsignedByte() * 100 / 6);
-        position.set(Position.KEY_RSSI, buf.readUnsignedByte());
-        position.set(Position.KEY_ALARM, decodeAlarm(buf.readUnsignedByte()));
-
-        return true;
     }
 
-    private String decodeAlarm(short value) {
-        switch (value) {
-            case 0x01:
-                return Position.ALARM_SOS;
-            case 0x02:
-                return Position.ALARM_POWER_CUT;
-            case 0x03:
-            case 0x09:
-                return Position.ALARM_VIBRATION;
-            case 0x04:
-                return Position.ALARM_GEOFENCE_ENTER;
-            case 0x05:
-                return Position.ALARM_GEOFENCE_EXIT;
-            case 0x06:
-                return Position.ALARM_OVERSPEED;
-            case 0x0E:
-            case 0x0F:
-                return Position.ALARM_LOW_BATTERY;
-            case 0x11:
-                return Position.ALARM_POWER_OFF;
-            case 0x13:
-                return Position.ALARM_TAMPERING;
-            case 0x14:
-                return Position.ALARM_DOOR;
-            case 0x29:
-                return Position.ALARM_ACCELERATION;
-            case 0x30:
-                return Position.ALARM_BRAKING;
-            case 0x2A:
-            case 0x2B:
-                return Position.ALARM_CORNERING;
-            case 0x2C:
-                return Position.ALARM_ACCIDENT;
-            case 0x23:
-                return Position.ALARM_FALL_DOWN;
-            default:
-                return null;
-        }
+    private String decodeAlarm(int value, boolean modelLW, boolean modelSW, boolean modelVL) {
+        return switch (value) {
+            case 0x01 -> Position.ALARM_SOS;
+            case 0x02 -> Position.ALARM_POWER_CUT;
+            case 0x03 -> Position.ALARM_VIBRATION;
+            case 0x04 -> Position.ALARM_GEOFENCE_ENTER;
+            case 0x05 -> Position.ALARM_GEOFENCE_EXIT;
+            case 0x06 -> Position.ALARM_OVERSPEED;
+            case 0x09 -> variant == Variant.TRX16I ? Position.ALARM_GEOFENCE
+                    : modelVL ? Position.ALARM_TOW : Position.ALARM_VIBRATION;
+            case 0x0E -> variant == Variant.TRX16I ? Position.ALARM_LOW_POWER : Position.ALARM_LOW_BATTERY;
+            case 0x0F -> Position.ALARM_LOW_BATTERY;
+            case 0x11 -> Position.ALARM_POWER_OFF;
+            case 0x0C, 0x13, 0x25, 0x32 -> Position.ALARM_TAMPERING;
+            case 0x14 -> Position.ALARM_DOOR;
+            case 0x18 -> modelLW ? Position.ALARM_ACCIDENT : Position.ALARM_REMOVING;
+            case 0x19 -> modelLW ? Position.ALARM_ACCELERATION : Position.ALARM_LOW_BATTERY;
+            case 0x1A, 0x27, 0xF1 -> Position.ALARM_BRAKING;
+            case 0x1B, 0x2A, 0x2B, 0x2E -> Position.ALARM_CORNERING;
+            case 0x23 -> Position.ALARM_FALL_DOWN;
+            case 0x26, 0xF0 -> Position.ALARM_ACCELERATION;
+            case 0x28 -> modelSW ? Position.ALARM_CORNERING
+                    : modelVL ? Position.ALARM_POWER_OFF : Position.ALARM_BRAKING;
+            case 0x29 -> modelSW ? Position.ALARM_ACCIDENT : Position.ALARM_ACCELERATION;
+            case 0x2C, 0xF2 -> Position.ALARM_ACCIDENT;
+            case 0x30 -> modelVL ? Position.ALARM_BRAKING : Position.ALARM_JAMMING;
+            case 0x33 -> Position.ALARM_LOCK;
+            case 0x34 -> Position.ALARM_UNLOCK;
+            case 0x53 -> Position.ALARM_FUEL_LEAK;
+            case 0x5B, 0x5C -> Position.ALARM_TEMPERATURE;
+            case 0xC9 -> Position.ALARM_IDLE;
+            case 0x0107, 0x010B -> Position.ALARM_JAMMING;
+            default -> null;
+        };
     }
 
-    private static final Pattern PATTERN_FUEL = new PatternBuilder()
-            .text("!AIOIL,")
-            .number("d+,")                       // device address
-            .number("d+.d+,")                    // output value
-            .number("(d+.d+),")                  // temperature
-            .expression("[^,]+,")                // version
-            .number("dd")                        // back wave
-            .number("d")                         // software status code
-            .number("d,")                        // hardware status code
-            .number("(d+.d+),")                  // measured value
-            .expression("[01],")                 // movement status
-            .number("d+,")                       // excited wave times
-            .number("xx")                        // checksum
-            .compile();
+    @Override
+    protected Object decode(
+            Channel channel, SocketAddress remoteAddress, Object msg) throws Exception {
 
-    private Position decodeFuelData(Position position, String sentence) {
-        Parser parser = new Parser(PATTERN_FUEL, sentence);
-        if (!parser.matches()) {
-            return null;
-        }
+        ByteBuf buf = (ByteBuf) msg;
 
-        position.set(Position.PREFIX_TEMP + 1, parser.nextDouble(0));
-        position.set(Position.KEY_FUEL_LEVEL, parser.nextDouble(0));
+        decodeVariant(buf);
 
-        return position;
-    }
+        boolean extended = buf.readShort() != 0x7878;
 
-    private static final Pattern PATTERN_LOCATION = new PatternBuilder()
-            .text("Current position!")
-            .number("Lat:([NS])(d+.d+),")        // latitude
-            .number("Lon:([EW])(d+.d+),")        // longitude
-            .text("Course:").number("(d+.d+),")  // course
-            .text("Speed:").number("(d+.d+),")   // speed
-            .text("DateTime:")
-            .number("(dddd)-(dd)-(dd) +")        // date
-            .number("(dd):(dd):(dd)")            // time
-            .compile();
-
-    private Position decodeLocationString(Position position, String sentence) {
-        Parser parser = new Parser(PATTERN_LOCATION, sentence);
-        if (!parser.matches()) {
-            return null;
-        }
-
-        position.setValid(true);
-        position.setLatitude(parser.nextCoordinate(Parser.CoordinateFormat.HEM_DEG));
-        position.setLongitude(parser.nextCoordinate(Parser.CoordinateFormat.HEM_DEG));
-        position.setCourse(parser.nextDouble());
-        position.setSpeed(parser.nextDouble());
-        position.setTime(parser.nextDateTime(Parser.DateTimeFormat.YMD_HMS));
-
-        return position;
-    }
-
-    private Object decodeBasic(Channel channel, SocketAddress remoteAddress, ByteBuf buf) throws Exception {
-
-        int length = buf.readUnsignedByte();
+        int length = extended ? buf.readUnsignedShort() : buf.readUnsignedByte();
         int dataLength = length - 5;
         int type = buf.readUnsignedByte();
 
+        Position position = new Position(getProtocolName());
         DeviceSession deviceSession = null;
         if (type != MSG_LOGIN) {
             deviceSession = getDeviceSession(channel, remoteAddress);
             if (deviceSession == null) {
                 return null;
             }
-            if (deviceSession.getTimeZone() == null) {
-                deviceSession.setTimeZone(getTimeZone(deviceSession.getDeviceId()));
+            position.setDeviceId(deviceSession.getDeviceId());
+            if (!deviceSession.contains(DeviceSession.KEY_TIMEZONE)) {
+                deviceSession.set(DeviceSession.KEY_TIMEZONE, getTimeZone(deviceSession.getDeviceId()));
             }
         }
+
+        String model = deviceSession != null ? getDeviceModel(deviceSession) : null;
+        if (model != null) {
+            model = model.toUpperCase(Locale.ROOT);
+        }
+        boolean modelLW = model != null && model.startsWith("LW");
+        boolean modelSW = "SEEWORLD".equals(model);
+        boolean modelNT = model != null && NT_MODELS.contains(model);
+        boolean modelVL = model != null && VL_MODELS.contains(model);
 
         if (type == MSG_LOGIN) {
 
@@ -448,36 +526,27 @@ public class Gt06ProtocolDecoder extends BaseProtocolDecoder {
             buf.readUnsignedShort(); // type
 
             deviceSession = getDeviceSession(channel, remoteAddress, imei);
-            if (deviceSession != null && deviceSession.getTimeZone() == null) {
-                deviceSession.setTimeZone(getTimeZone(deviceSession.getDeviceId()));
-            }
-
-            if (dataLength > 10) {
-                int extensionBits = buf.readUnsignedShort();
-                int hours = (extensionBits >> 4) / 100;
-                int minutes = (extensionBits >> 4) % 100;
-                int offset = (hours * 60 + minutes) * 60;
-                if ((extensionBits & 0x8) != 0) {
-                    offset = -offset;
-                }
-                if (deviceSession != null) {
-                    TimeZone timeZone = deviceSession.getTimeZone();
-                    if (timeZone.getRawOffset() == 0) {
-                        timeZone.setRawOffset(offset * 1000);
-                        deviceSession.setTimeZone(timeZone);
-                    }
-                }
-
-            }
-
             if (deviceSession != null) {
+                TimeZone timeZone = getTimeZone(deviceSession.getDeviceId(), null);
+                if (timeZone == null && dataLength > 10) {
+                    int extensionBits = buf.readUnsignedShort();
+                    int hours = (extensionBits >> 4) / 100;
+                    int minutes = (extensionBits >> 4) % 100;
+                    int offset = (hours * 60 + minutes) * 60;
+                    if ((extensionBits & 0x8) != 0) {
+                        offset = -offset;
+                    }
+                    timeZone = TimeZone.getTimeZone("UTC");
+                    timeZone.setRawOffset(offset * 1000);
+                }
+                deviceSession.set(DeviceSession.KEY_TIMEZONE, timeZone);
+
                 sendResponse(channel, false, type, buf.getShort(buf.writerIndex() - 6), null);
             }
 
-        } else if (type == MSG_HEARTBEAT) {
+            return null;
 
-            Position position = new Position(getProtocolName());
-            position.setDeviceId(deviceSession.getDeviceId());
+        } else if (type == MSG_HEARTBEAT) {
 
             getLastLocation(position, null);
 
@@ -487,7 +556,7 @@ public class Gt06ProtocolDecoder extends BaseProtocolDecoder {
             position.set(Position.KEY_CHARGE, BitUtil.check(status, 2));
 
             if (buf.readableBytes() >= 2 + 6) {
-                position.set(Position.KEY_BATTERY, buf.readUnsignedShort() * 0.01);
+                position.set(Position.KEY_BATTERY, buf.readUnsignedShort() / 100.0);
             }
             if (buf.readableBytes() >= 1 + 6) {
                 position.set(Position.KEY_RSSI, buf.readUnsignedByte());
@@ -497,7 +566,9 @@ public class Gt06ProtocolDecoder extends BaseProtocolDecoder {
 
             return position;
 
-        } else if (type == MSG_ADDRESS_REQUEST) {
+        } else if (type == MSG_ADDRESS_REQUEST || (type == MSG_LBS_ADDRESS_REQUEST
+                && length == buf.readableBytes() - 1
+                && length == (BitUtil.check(buf.getUnsignedShort(buf.readerIndex()), 15) ? 0x25 : 0x24))) {
 
             String response = "NA&&NA&&0##";
             ByteBuf content = Unpooled.buffer();
@@ -505,6 +576,8 @@ public class Gt06ProtocolDecoder extends BaseProtocolDecoder {
             content.writeInt(0);
             content.writeBytes(response.getBytes(StandardCharsets.US_ASCII));
             sendResponse(channel, true, MSG_ADDRESS_RESPONSE, 0, content);
+
+            return null;
 
         } else if (type == MSG_TIME_REQUEST) {
 
@@ -518,44 +591,13 @@ public class Gt06ProtocolDecoder extends BaseProtocolDecoder {
             content.writeByte(calendar.get(Calendar.SECOND));
             sendResponse(channel, false, MSG_TIME_REQUEST, 0, content);
 
-        } else if (type == MSG_X1_GPS || type == MSG_X1_PHOTO_INFO) {
+            return null;
 
-            return decodeX1(channel, buf, deviceSession, type);
-
-        } else if (type == MSG_WIFI || type == MSG_WIFI_2 || type == MSG_WIFI_4) {
-
-            return decodeWifi(channel, buf, deviceSession, type);
-
-        } else if (type == MSG_INFO) {
-
-            Position position = new Position(getProtocolName());
-            position.setDeviceId(deviceSession.getDeviceId());
-
-            getLastLocation(position, null);
-
-            position.set(Position.KEY_POWER, buf.readShort() * 0.01);
-
-            return position;
-
-        } else {
-
-            return decodeBasicOther(channel, buf, deviceSession, type, dataLength);
-
-        }
-
-        return null;
-    }
-
-    private Object decodeX1(Channel channel, ByteBuf buf, DeviceSession deviceSession, int type) {
-
-        if (type == MSG_X1_GPS) {
-
-            Position position = new Position(getProtocolName());
-            position.setDeviceId(deviceSession.getDeviceId());
+        } else if (type == MSG_X1_GPS && variant != Variant.SL4X) {
 
             buf.readUnsignedInt(); // data and alarm
 
-            decodeGps(position, buf, false, deviceSession.getTimeZone());
+            decodeGps(position, buf, false, deviceSession.get(DeviceSession.KEY_TIMEZONE));
 
             buf.readUnsignedShort(); // terminal info
 
@@ -570,8 +612,8 @@ public class Gt06ProtocolDecoder extends BaseProtocolDecoder {
                 position.set(Position.KEY_DRIVER_UNIQUE_ID, String.valueOf(driverId));
             }
 
-            position.set(Position.KEY_BATTERY, buf.readUnsignedShort() * 0.01);
-            position.set(Position.KEY_POWER, buf.readUnsignedShort() * 0.01);
+            position.set(Position.KEY_BATTERY, buf.readUnsignedShort() / 100.0);
+            position.set(Position.KEY_POWER, buf.readUnsignedShort() / 100.0);
 
             long portInfo = buf.readUnsignedInt();
 
@@ -579,7 +621,7 @@ public class Gt06ProtocolDecoder extends BaseProtocolDecoder {
             position.set(Position.KEY_OUTPUT, buf.readUnsignedByte());
 
             for (int i = 1; i <= BitUtil.between(portInfo, 20, 24); i++) {
-                position.set(Position.PREFIX_ADC + i, buf.readUnsignedShort() * 0.01);
+                position.set(Position.PREFIX_ADC + i, buf.readUnsignedShort() / 100.0);
             }
 
             return position;
@@ -594,114 +636,144 @@ public class Gt06ProtocolDecoder extends BaseProtocolDecoder {
             buf.readUnsignedByte(); // photo source
             buf.readUnsignedByte(); // picture format
 
-            ByteBuf photo = Unpooled.buffer(buf.readInt());
+            newMediaBuffer(buf.readInt());
             int pictureId = buf.readInt();
-            photos.put(pictureId, photo);
             sendPhotoRequest(channel, pictureId);
 
-        }
+            return null;
 
-        return null;
-    }
+        } else if ((type == MSG_WIFI && variant != Variant.RFID) || type == MSG_WIFI_2 || type == MSG_WIFI_4) {
 
-    private Object decodeWifi(Channel channel, ByteBuf buf, DeviceSession deviceSession, int type) {
-
-        Position position = new Position(getProtocolName());
-        position.setDeviceId(deviceSession.getDeviceId());
-
-        ByteBuf time = buf.readSlice(6);
-        DateBuilder dateBuilder = new DateBuilder()
-                .setYear(BcdUtil.readInteger(time, 2))
-                .setMonth(BcdUtil.readInteger(time, 2))
-                .setDay(BcdUtil.readInteger(time, 2))
-                .setHour(BcdUtil.readInteger(time, 2))
-                .setMinute(BcdUtil.readInteger(time, 2))
-                .setSecond(BcdUtil.readInteger(time, 2));
-        getLastLocation(position, dateBuilder.getDate());
-
-        Network network = new Network();
-
-        int wifiCount;
-        if (type == MSG_WIFI_4) {
-            wifiCount = buf.readUnsignedByte();
-        } else {
-            wifiCount = buf.getUnsignedByte(2);
-        }
-
-        for (int i = 0; i < wifiCount; i++) {
-            if (type == MSG_WIFI_4) {
-                buf.skipBytes(2);
-            }
-            WifiAccessPoint wifiAccessPoint = new WifiAccessPoint();
-            wifiAccessPoint.setMacAddress(String.format("%02x:%02x:%02x:%02x:%02x:%02x",
-                    buf.readUnsignedByte(), buf.readUnsignedByte(), buf.readUnsignedByte(),
-                    buf.readUnsignedByte(), buf.readUnsignedByte(), buf.readUnsignedByte()));
-            if (type != MSG_WIFI_4) {
-                wifiAccessPoint.setSignalStrength((int) buf.readUnsignedByte());
-            }
-            network.addWifiAccessPoint(wifiAccessPoint);
-        }
-
-        if (type != MSG_WIFI_4) {
-
-            int cellCount = buf.readUnsignedByte();
-            int mcc = buf.readUnsignedShort();
-            int mnc = buf.readUnsignedByte();
-            for (int i = 0; i < cellCount; i++) {
-                network.addCellTower(CellTower.from(
-                        mcc, mnc, buf.readUnsignedShort(), buf.readUnsignedShort(), buf.readUnsignedByte()));
-            }
-
-            if (channel != null) {
-                ByteBuf response = Unpooled.buffer();
-                response.writeShort(0x7878);
-                response.writeByte(0);
-                response.writeByte(type);
-                response.writeBytes(time.resetReaderIndex());
-                response.writeByte('\r');
-                response.writeByte('\n');
-                channel.writeAndFlush(new NetworkMessage(response, channel.remoteAddress()));
-            }
-
-        }
-
-        position.setNetwork(network);
-
-        return position;
-    }
-
-    private Object decodeBasicOther(
-            Channel channel, ByteBuf buf, DeviceSession deviceSession, int type, int dataLength) {
-
-        Position position = new Position(getProtocolName());
-        position.setDeviceId(deviceSession.getDeviceId());
-
-        if (type == MSG_LBS_MULTIPLE || type == MSG_LBS_EXTEND || type == MSG_LBS_WIFI
-                || type == MSG_LBS_2 || type == MSG_WIFI_3) {
-
-            boolean longFormat = type == MSG_LBS_2 || type == MSG_WIFI_3;
-
-            DateBuilder dateBuilder = new DateBuilder(deviceSession.getTimeZone())
-                    .setDate(buf.readUnsignedByte(), buf.readUnsignedByte(), buf.readUnsignedByte())
-                    .setTime(buf.readUnsignedByte(), buf.readUnsignedByte(), buf.readUnsignedByte());
-
+            ByteBuf time = buf.readSlice(6);
+            DateBuilder dateBuilder = new DateBuilder()
+                    .setYear(BcdUtil.readInteger(time, 2))
+                    .setMonth(BcdUtil.readInteger(time, 2))
+                    .setDay(BcdUtil.readInteger(time, 2))
+                    .setHour(BcdUtil.readInteger(time, 2))
+                    .setMinute(BcdUtil.readInteger(time, 2))
+                    .setSecond(BcdUtil.readInteger(time, 2));
             getLastLocation(position, dateBuilder.getDate());
 
-            int mcc = buf.readUnsignedShort();
-            int mnc = BitUtil.check(mcc, 15) ? buf.readUnsignedShort() : buf.readUnsignedByte();
             Network network = new Network();
-            for (int i = 0; i < 7; i++) {
-                int lac = longFormat ? buf.readInt() : buf.readUnsignedShort();
-                int cid = longFormat ? (int) buf.readLong() : buf.readUnsignedMedium();
+
+            int wifiCount;
+            if (type == MSG_WIFI_4) {
+                wifiCount = buf.readUnsignedByte();
+            } else {
+                wifiCount = buf.getUnsignedByte(2);
+            }
+
+            for (int i = 0; i < wifiCount; i++) {
+                if (type == MSG_WIFI_4) {
+                    buf.skipBytes(2);
+                }
+                WifiAccessPoint wifiAccessPoint = new WifiAccessPoint();
+                wifiAccessPoint.setMacAddress(String.format("%02x:%02x:%02x:%02x:%02x:%02x",
+                        buf.readUnsignedByte(), buf.readUnsignedByte(), buf.readUnsignedByte(),
+                        buf.readUnsignedByte(), buf.readUnsignedByte(), buf.readUnsignedByte()));
+                if (type != MSG_WIFI_4) {
+                    wifiAccessPoint.setSignalStrength((int) buf.readUnsignedByte());
+                }
+                network.addWifiAccessPoint(wifiAccessPoint);
+            }
+
+            if (type != MSG_WIFI_4) {
+
+                int cellCount = buf.readUnsignedByte();
+                int mcc = buf.readUnsignedShort();
+                int mnc = buf.readUnsignedByte();
+                for (int i = 0; i < cellCount; i++) {
+                    network.addCellTower(CellTower.from(
+                            mcc, mnc, buf.readUnsignedShort(), buf.readUnsignedShort(), buf.readUnsignedByte()));
+                }
+
+                if (channel != null) {
+                    ByteBuf response = Unpooled.buffer();
+                    response.writeShort(0x7878);
+                    response.writeByte(0);
+                    response.writeByte(type);
+                    response.writeBytes(time.resetReaderIndex());
+                    response.writeByte('\r');
+                    response.writeByte('\n');
+                    channel.writeAndFlush(new NetworkMessage(response, channel.remoteAddress()));
+                }
+
+            }
+
+            position.setNetwork(network);
+
+            return position;
+
+        } else if (type == MSG_INFO && !extended) {
+
+            getLastLocation(position, null);
+
+            position.set(Position.KEY_POWER, buf.readShort() / 100.0);
+
+            return position;
+
+        } else if (type == MSG_LBS_MULTIPLE_3 && variant == Variant.SR411_MINI) {
+
+            decodeGps(position, buf, false, deviceSession.get(DeviceSession.KEY_TIMEZONE));
+
+            decodeLbs(position, buf, type, false);
+
+            position.set(Position.KEY_IGNITION, buf.readUnsignedByte() > 0);
+            position.set(Position.KEY_POWER, buf.readUnsignedShort() / 100.0);
+            position.set(Position.KEY_BATTERY, buf.readUnsignedShort() / 100.0);
+
+            return position;
+
+        } else if (type == MSG_LBS_MULTIPLE_1 || type == MSG_LBS_MULTIPLE_2 || type == MSG_LBS_MULTIPLE_3
+                || type == MSG_LBS_EXTEND || type == MSG_LBS_WIFI || type == MSG_LBS_2 || type == MSG_LBS_3
+                || (type == MSG_WIFI_3 && variant != Variant.LW4G) || (type == MSG_WIFI_5 && !extended)
+                || type == MSG_WIFI_ALARM) {
+
+            getLastLocation(position, decodeDate(buf, deviceSession));
+
+            if (variant == Variant.WANWAY_S20 || variant == Variant.SL4X) {
+                buf.readUnsignedByte(); // ta
+            }
+
+            int mcc = buf.readUnsignedShort();
+            int mnc = BitUtil.check(mcc, 15) || variant == Variant.SL4X
+                    ? buf.readUnsignedShort() : buf.readUnsignedByte();
+            Network network = new Network();
+
+            boolean cell4g = type == MSG_WIFI_ALARM && buf.readUnsignedByte() > 0;
+            boolean sharedLac = type == MSG_LBS_EXTEND && length == 0x25;
+            boolean shortCellId = type == MSG_LBS_MULTIPLE_1 && buf.readableBytes() == 36;
+            int lac = sharedLac ? buf.readUnsignedShort() : 0;
+
+            int cellCount = variant == Variant.WANWAY_S20 || type == MSG_WIFI_ALARM
+                    || (variant == Variant.SL4X && type == MSG_LBS_3)
+                    ? buf.readUnsignedByte() : type == MSG_WIFI_5 || shortCellId ? 6 : 7;
+            for (int i = 0; i < cellCount; i++) {
+                int cid;
+                if (sharedLac) {
+                    cid = buf.readUnsignedShort();
+                } else if (type == MSG_LBS_2 || type == MSG_WIFI_3 || cell4g) {
+                    lac = buf.readInt();
+                    cid = (int) buf.readLong();
+                } else if (type == MSG_WIFI_5 || type == MSG_LBS_3) {
+                    lac = buf.readUnsignedShort();
+                    cid = (int) buf.readUnsignedInt();
+                } else {
+                    lac = buf.readUnsignedShort();
+                    cid = shortCellId ? buf.readUnsignedShort() : buf.readUnsignedMedium();
+                }
                 int rssi = -buf.readUnsignedByte();
-                if (lac > 0) {
+                if (cid > 0) {
                     network.addCellTower(CellTower.from(BitUtil.to(mcc, 15), mnc, lac, cid, rssi));
                 }
             }
 
-            buf.readUnsignedByte(); // time leads
+            if (!sharedLac && !shortCellId && variant != Variant.WANWAY_S20 && variant != Variant.SL4X) {
+                buf.readUnsignedByte(); // ta
+            }
 
-            if (type != MSG_LBS_MULTIPLE && type != MSG_LBS_2) {
+            if (!sharedLac && type != MSG_LBS_MULTIPLE_1 && type != MSG_LBS_MULTIPLE_2 && type != MSG_LBS_MULTIPLE_3
+                    && type != MSG_LBS_2 && type != MSG_LBS_3) {
                 int wifiCount = buf.readUnsignedByte();
                 for (int i = 0; i < wifiCount; i++) {
                     String mac = ByteBufUtil.hexDump(buf.readSlice(6)).replaceAll("(..)", "$1:");
@@ -711,6 +783,24 @@ public class Gt06ProtocolDecoder extends BaseProtocolDecoder {
             }
 
             position.setNetwork(network);
+
+            if (type == MSG_WIFI_ALARM) {
+                int alarm = buf.readUnsignedByte();
+                int language = buf.readUnsignedByte();
+                position.addAlarm(decodeAlarm((language >> 4) << 8 | alarm, modelLW, modelSW, modelVL));
+            }
+
+        } else if (type == MSG_BLUETOOTH_CLOCK) {
+
+            getLastLocation(position, decodeDate(buf, deviceSession));
+
+            position.set(Position.KEY_RSSI, buf.readByte());
+            position.set("tagMac", ByteBufUtil.hexDump(buf.readSlice(6)));
+            position.set("tagUuid", ByteBufUtil.hexDump(buf.readSlice(16)));
+            position.set("tagMajor", buf.readUnsignedShort());
+            position.set("tagMinor", buf.readUnsignedShort());
+            position.set("tagBattery", buf.readUnsignedShort() / 100.0);
+            position.set("clock", BitUtil.between(buf.readUnsignedByte(), 2, 6));
 
         } else if (type == MSG_STRING) {
 
@@ -728,7 +818,7 @@ public class Gt06ProtocolDecoder extends BaseProtocolDecoder {
                 }
             }
 
-        } else if (type == MSG_BMS || type == MSG_BMS_2) {
+        } else if (type == MSG_BMS) {
 
             buf.skipBytes(8); // serial number
 
@@ -739,12 +829,12 @@ public class Gt06ProtocolDecoder extends BaseProtocolDecoder {
             position.set("absoluteCapacity", buf.readUnsignedByte());
             position.set("fullCapacity", buf.readUnsignedShort());
             position.set("batteryHealth", buf.readUnsignedByte());
-            position.set("batteryTemp", buf.readUnsignedShort() * 0.1 - 273.1);
+            position.set("batteryTemp", buf.readUnsignedShort() / 10.0 - 273.1);
             position.set("current", buf.readUnsignedShort());
-            position.set(Position.KEY_BATTERY, buf.readUnsignedShort() * 0.001);
+            position.set(Position.KEY_BATTERY, buf.readUnsignedShort() / 1000.0);
             position.set("cycleIndex", buf.readUnsignedShort());
             for (int i = 1; i <= 14; i++) {
-                position.set("batteryCell" + i, buf.readUnsignedShort() * 0.001);
+                position.set("batteryCell" + i, buf.readUnsignedShort() / 1000.0);
             }
             position.set("currentChargeInterval", buf.readUnsignedShort());
             position.set("maxChargeInterval", buf.readUnsignedShort());
@@ -760,191 +850,365 @@ public class Gt06ProtocolDecoder extends BaseProtocolDecoder {
 
             return position;
 
-        } else if (isSupported(type)) {
+        } else if (type == MSG_STATUS && buf.readableBytes() == 22) {
 
-            if (type == MSG_STATUS && buf.readableBytes() == 22) {
-                decodeHeartbeat(buf, position);
+            getLastLocation(position, null);
+
+            buf.readUnsignedByte(); // information content
+            buf.readUnsignedShort(); // satellites
+            buf.readUnsignedByte(); // alarm
+            buf.readUnsignedByte(); // language
+
+            position.set(Position.KEY_BATTERY_LEVEL, buf.readUnsignedByte());
+
+            buf.readUnsignedByte(); // working mode
+            buf.readUnsignedShort(); // working voltage
+            buf.readUnsignedByte(); // reserved
+            buf.readUnsignedShort(); // working times
+            buf.readUnsignedShort(); // working time
+
+            int value = buf.readUnsignedShort();
+            double temperature = BitUtil.to(value, 15) / 10.0;
+            position.set(Position.PREFIX_TEMP + 1, BitUtil.check(value, 15) ? temperature : -temperature);
+
+        } else if (type == MSG_IBUTTON) {
+
+            buf.skipBytes(8); // imei
+
+            decodeGps(position, buf, false, deviceSession.get(DeviceSession.KEY_TIMEZONE));
+
+            decodeLbs(position, buf, type, false);
+
+            long driverUniqueId = (buf.readUnsignedInt() << 16) | buf.readUnsignedShort();
+            position.set(Position.KEY_DRIVER_UNIQUE_ID, String.valueOf(driverUniqueId));
+
+        } else if (type == MSG_LOCATION_RFID && variant == Variant.TRX16I) {
+
+            decodeGps(position, buf, false, deviceSession.get(DeviceSession.KEY_TIMEZONE));
+
+            decodeLbs(position, buf, type, false);
+
+            position.set(Position.KEY_IGNITION, buf.readUnsignedByte() > 0);
+            position.set("uploadMode", buf.readUnsignedByte());
+            position.set(Position.KEY_ARCHIVE, buf.readUnsignedByte() > 0);
+
+            position.set(Position.KEY_ODOMETER, buf.readUnsignedInt()); // unit unconfirmed
+            position.set(Position.KEY_POWER, buf.readUnsignedShort() / 100.0);
+            position.set(Position.KEY_BATTERY, buf.readUnsignedByte() / 10.0);
+            position.set(Position.KEY_HOURS, buf.readUnsignedMedium() * 60 * 1000L);
+
+            String rfid = ByteBufUtil.hexDump(buf.readSlice(8));
+            if (!rfid.matches("0+")) {
+                position.set(Position.KEY_DRIVER_UNIQUE_ID, rfid);
+            }
+
+        } else if (isSupported(type, model)
+                && !(extended && (type == MSG_GPS_LBS_STATUS_4 || type == MSG_STATUS_2))) {
+
+            if (type == MSG_LBS_STATUS && variant == Variant.SPACE10X) {
+                return null; // multi-lbs message
+            }
+
+            position.set(Position.KEY_TYPE, type);
+
+            if (type == MSG_GPS_LBS_1 && "QH302R".equals(model)) {
+                buf.skipBytes(8); // imei
+            }
+            if ((type == MSG_GPS_LBS_2 || type == MSG_GPS_LBS_DRIVER) && modelNT) {
+                buf.readUnsignedByte(); // location source type
+                buf.skipBytes(8); // imei
+                position.setDeviceTime(decodeDate(buf, deviceSession));
+            }
+
+            if (type == MSG_GPS_LBS_6 && length == 0x13) {
+                getLastLocation(position, decodeDate(buf, deviceSession));
+            } else if (hasGps(type)) {
+                decodeGps(position, buf, false, deviceSession.get(DeviceSession.KEY_TIMEZONE));
             } else {
-                decodeBasicUniversal(buf, deviceSession, type, position);
+                getLastLocation(position, null);
+            }
+
+            if (hasLbs(type) && buf.readableBytes() > 6) {
+                boolean hasLength = hasStatus(type, model)
+                        && type != MSG_LBS_STATUS
+                        && type != MSG_LBS_ALARM
+                        && type != MSG_ALARM_MODULE
+                        && (type != MSG_GPS_LBS_STATUS_1 || variant != Variant.VXT01)
+                        && type != MSG_GPS_LBS_STATUS_5;
+                decodeLbs(position, buf, type, hasLength);
+            }
+
+            if (hasStatus(type, model)) {
+                if (type == MSG_GPS_LBS_STATUS_5) {
+                    buf.readUnsignedByte(); // network indicator
+                }
+                decodeStatus(position, buf);
+                if (variant == Variant.OBD6) {
+                    int signal = buf.readUnsignedShort();
+                    int satellites = BitUtil.between(signal, 10, 15) + BitUtil.between(signal, 5, 10);
+                    position.set(Position.KEY_SATELLITES, satellites);
+                    position.set(Position.KEY_RSSI, BitUtil.to(signal, 5));
+                    position.addAlarm(decodeAlarm(buf.readUnsignedByte(), modelLW, modelSW, modelVL));
+                    buf.readUnsignedByte(); // language
+                    position.set(Position.KEY_BATTERY_LEVEL, buf.readUnsignedByte());
+                    int mode = buf.readUnsignedByte();
+                    position.set(Position.KEY_POWER, buf.readUnsignedShort() / 100.0);
+                    buf.readUnsignedByte(); // reserved
+                    buf.readUnsignedShort(); // working time
+                    if (mode == 4) {
+                        position.set(Position.PREFIX_TEMP + 1, buf.readShort() / 10.0);
+                    }
+                } else if (variant == Variant.SEEWORLD && length == 0x18) {
+                    buf.readUnsignedShort(); // extension bit status
+                    buf.readUnsignedByte(); // voltage level
+                    position.set(Position.KEY_RSSI, buf.readUnsignedByte());
+                    position.set(Position.KEY_POWER, (double) buf.readUnsignedByte());
+                    buf.readUnsignedByte(); // language
+                    buf.readUnsignedByte(); // sound switch
+                    buf.readUnsignedByte(); // light switch
+                    position.set(Position.KEY_STEPS, buf.readUnsignedInt());
+                    position.set(Position.KEY_BATTERY_LEVEL, buf.readUnsignedByte());
+                    position.set(Position.KEY_CHARGE, buf.readUnsignedByte() == 1);
+                    position.set(Position.KEY_MOTION, buf.readUnsignedByte() == 1);
+                } else {
+                    if (type == MSG_GPS_LBS_STATUS_5
+                            || (modelNT && (type == MSG_GPS_LBS_2 || type == MSG_GPS_LBS_DRIVER))) {
+                        position.set(Position.KEY_POWER, buf.readUnsignedShort() / 100.0);
+                    }
+                    if (type == MSG_STATUS && "R11".equals(model)) {
+                        position.set(Position.KEY_POWER, buf.readUnsignedShort() / 100.0);
+                    } else {
+                        int battery = buf.readUnsignedByte();
+                        if (modelNT && (type == MSG_GPS_LBS_2 || type == MSG_GPS_LBS_DRIVER)) {
+                            position.set(Position.KEY_BATTERY, battery / 10.0);
+                        } else if (battery <= 6) {
+                            position.set(Position.KEY_BATTERY_LEVEL, battery * 100 / 6);
+                        } else if (battery <= 100) {
+                            position.set(Position.KEY_BATTERY_LEVEL, battery);
+                        }
+                    }
+                    position.set(Position.KEY_RSSI, buf.readUnsignedByte());
+                    if (type == MSG_STATUS && modelLW) {
+                        position.set(Position.KEY_POWER, BitUtil.to(buf.readUnsignedShort(), 12) / 10.0);
+                    } else {
+                        int extension = buf.readUnsignedByte();
+                        if (type == MSG_GPS_LBS_STATUS_3 || type == MSG_FENCE_MULTI
+                                || type == MSG_ALARM_MODULE) {
+                            extension += (buf.getUnsignedByte(buf.readerIndex()) >> 4) << 8;
+                        }
+                        if (type == MSG_STATUS && modelSW) {
+                            position.set(Position.KEY_POWER, (double) extension);
+                        } else if (variant != Variant.VXT01) {
+                            position.addAlarm(decodeAlarm(extension, modelLW, modelSW, modelVL));
+                            if (variant == Variant.TRX16I) {
+                                position.set(Position.KEY_EVENT, extension);
+                            }
+                        }
+                    }
+                }
+            }
+
+            if (type == MSG_STATUS_2 || type == MSG_GPS_LBS_STATUS_5 || type == MSG_GPS_LBS_STATUS_3
+                    || type == MSG_FENCE_MULTI || type == MSG_ALARM_MODULE
+                    || modelNT && (type == MSG_GPS_LBS_2 || type == MSG_GPS_LBS_DRIVER)) {
+                buf.readUnsignedByte(); // language
+            }
+
+            if (type == MSG_GPS_LBS_STATUS_1 && variant == Variant.TRX16I) {
+                buf.readUnsignedByte(); // language
+                String rfid = ByteBufUtil.hexDump(buf.readSlice(8));
+                if (!rfid.matches("0+")) {
+                    position.set(Position.KEY_DRIVER_UNIQUE_ID, rfid);
+                }
+            }
+
+            if (type == MSG_STATUS_2 || type == MSG_ALARM_MODULE) {
+                while (buf.readableBytes() > 6) {
+                    int moduleType = buf.readUnsignedShort();
+                    int moduleLength = buf.readUnsignedByte();
+                    switch (moduleType) {
+                        case 0x0018 -> position.set(Position.KEY_BATTERY, buf.readUnsignedShort() / 100.0);
+                        case 0x0032 -> position.set("startupStatus", buf.readUnsignedByte());
+                        case 0x006A -> position.set(Position.KEY_BATTERY_LEVEL, buf.readUnsignedByte());
+                        default -> buf.skipBytes(moduleLength);
+                    }
+                }
+            }
+
+            if (type == MSG_GPS_LBS_STATUS_5) {
+                position.set(Position.KEY_ODOMETER, buf.readUnsignedInt());
+                position.set(Position.KEY_HOURS, buf.readUnsignedInt() * 1000);
+                buf.skipBytes(8); // terminal id
+                position.set(Position.KEY_INPUT, buf.readUnsignedShort());
+            }
+
+            if (type == MSG_GPS_LBS_1) {
+                if (variant == Variant.GT06E_CARD) {
+                    position.set(Position.KEY_ODOMETER, buf.readUnsignedInt());
+                    String data = buf.readCharSequence(buf.readUnsignedByte(), StandardCharsets.US_ASCII).toString();
+                    buf.readUnsignedByte(); // alarm
+                    buf.readUnsignedByte(); // swiped
+                    position.set(Position.KEY_CARD, data.trim());
+                } else if (variant == Variant.BENWAY) {
+                    int mask = buf.readUnsignedShort();
+                    position.set(Position.KEY_IGNITION, BitUtil.check(mask, 8 + 7));
+                    position.set(Position.PREFIX_IN + 2, BitUtil.check(mask, 8 + 6));
+                    if (BitUtil.check(mask, 8 + 4)) {
+                        int value = BitUtil.to(mask, 8 + 1);
+                        if (BitUtil.check(mask, 8 + 1)) {
+                            value = -value;
+                        }
+                        position.set(Position.PREFIX_TEMP + 1, value);
+                    } else {
+                        int value = BitUtil.to(mask, 8 + 2);
+                        if (BitUtil.check(mask, 8 + 5)) {
+                            position.set(Position.PREFIX_ADC + 1, value);
+                        } else {
+                            position.set(Position.PREFIX_ADC + 1, value / 10.0);
+                        }
+                    }
+                } else if (variant == Variant.VXT01) {
+                    decodeStatus(position, buf);
+                    position.set(Position.KEY_POWER, buf.readUnsignedShort() / 100.0);
+                    position.set(Position.KEY_RSSI, buf.readUnsignedByte());
+                    buf.readUnsignedByte(); // alarm extension
+                } else if (variant == Variant.S5) {
+                    decodeStatus(position, buf);
+                    position.set(Position.KEY_POWER, buf.readUnsignedShort() / 100.0);
+                    position.set(Position.KEY_RSSI, buf.readUnsignedByte());
+                    position.addAlarm(decodeAlarm(buf.readUnsignedByte(), modelLW, modelSW, modelVL));
+                    position.set("oil", buf.readUnsignedShort());
+                    int temperature = buf.readUnsignedByte();
+                    if (BitUtil.check(temperature, 7)) {
+                        temperature = -BitUtil.to(temperature, 7);
+                    }
+                    position.set(Position.PREFIX_TEMP + 1, temperature);
+                    position.set(Position.KEY_ODOMETER, buf.readUnsignedInt() * 10);
+                } else if (variant == Variant.WETRUST) {
+                    position.set(Position.KEY_ODOMETER, buf.readUnsignedInt());
+                    position.set(Position.KEY_CARD, buf.readCharSequence(
+                            buf.readUnsignedByte(), StandardCharsets.US_ASCII).toString());
+                    position.addAlarm(buf.readUnsignedByte() > 0 ? Position.ALARM_GENERAL : null);
+                    position.set("cardStatus", buf.readUnsignedByte());
+                    position.set(Position.KEY_DRIVING_TIME, buf.readUnsignedShort());
+                }
+            }
+
+            if (type == MSG_GPS_LBS_2 && variant == Variant.SEEWORLD) {
+                position.set(Position.KEY_IGNITION, buf.readUnsignedByte() > 0);
+                buf.readUnsignedByte(); // reporting mode
+                buf.readUnsignedByte(); // supplementary transmission
+                position.set(Position.KEY_ODOMETER, buf.readUnsignedInt());
+                buf.readUnsignedInt(); // travel time
+                int temperature = buf.readUnsignedShort();
+                if (BitUtil.check(temperature, 15)) {
+                    temperature = -BitUtil.to(temperature, 15);
+                }
+                position.set(Position.PREFIX_TEMP + 1, temperature / 100.0);
+                position.set(Position.KEY_HUMIDITY, buf.readUnsignedShort() / 100.0);
+            }
+
+            if (type == MSG_GPS_LBS_STATUS_4 && variant == Variant.SL4X) {
+                position.setAltitude(buf.readShort());
+            }
+
+            if ((type == MSG_GPS_LBS_2 || type == MSG_GPS_LBS_3 || type == MSG_GPS_LBS_4 || type == MSG_GPS_LBS_5)
+                    && buf.readableBytes() >= 3 + 6 && !modelNT) {
+                position.set(Position.KEY_IGNITION, buf.readUnsignedByte() > 0);
+                position.set(Position.KEY_EVENT, buf.readUnsignedByte()); // reason
+                position.set(Position.KEY_ARCHIVE, buf.readUnsignedByte() > 0);
+                if (variant == Variant.SL4X) {
+                    if (buf.readableBytes() > 2 + 6) {
+                        position.set(Position.KEY_ODOMETER, buf.readUnsignedInt());
+                    }
+                    position.setAltitude(buf.readShort());
+                }
+            }
+
+            if (type == MSG_GPS_LBS_3) {
+                int module = buf.readUnsignedShort();
+                int subLength = buf.readUnsignedByte();
+                switch (module) {
+                    case 0x0027 -> position.set(Position.KEY_POWER, buf.readUnsignedShort() / 100.0);
+                    case 0x002E -> position.set(Position.KEY_ODOMETER, buf.readUnsignedInt());
+                    case 0x003B -> position.setAccuracy(buf.readUnsignedShort() / 100.0);
+                    default -> buf.skipBytes(subLength);
+                }
+            }
+
+            if (type == MSG_GPS_LBS_RFID) {
+                position.set(Position.KEY_DRIVER_UNIQUE_ID, ByteBufUtil.hexDump(buf.readSlice(8)));
+                buf.readUnsignedByte(); // validity
+            }
+
+            if (modelNT && (type == MSG_GPS_LBS_2 || type == MSG_GPS_LBS_DRIVER)) {
+                position.set(Position.KEY_ODOMETER, buf.readUnsignedMedium());
+                position.set(Position.KEY_HOURS, buf.readUnsignedMedium() * 60 * 1000L);
+            }
+
+            if (modelNT && type == MSG_GPS_LBS_DRIVER) {
+                int driverLength = buf.readUnsignedByte();
+                if (driverLength > 0) {
+                    buf.readUnsignedByte(); // driver identifier type
+                    position.set(Position.KEY_DRIVER_UNIQUE_ID,
+                            ByteBufUtil.hexDump(buf.readSlice(driverLength - 1)));
+                }
+            }
+
+            if (buf.readableBytes() == 3 + 6 || buf.readableBytes() == 3 + 4 + 6) {
+                position.set(Position.KEY_IGNITION, buf.readUnsignedByte() > 0);
+                buf.readUnsignedByte(); // upload mode
+                position.set(Position.KEY_ARCHIVE, buf.readUnsignedByte() > 0 ? true : null);
+            }
+
+            if (buf.readableBytes() == 4 + 6) {
+                position.set(Position.KEY_ODOMETER, buf.readUnsignedInt());
+            }
+
+            if (type == MSG_GPS_LBS_STATUS_3 || type == MSG_FENCE_MULTI) {
+                position.set(Position.KEY_GEOFENCE, buf.readUnsignedByte());
             }
 
         } else if (type == MSG_ALARM) {
+
+            boolean jc400 = variant == Variant.JC400;
             boolean extendedAlarm = dataLength > 7;
             if (extendedAlarm) {
-                decodeGps(position, buf, false, false, false, deviceSession.getTimeZone());
-            } else {
-                DateBuilder dateBuilder = new DateBuilder(deviceSession.getTimeZone())
-                        .setDate(buf.readUnsignedByte(), buf.readUnsignedByte(), buf.readUnsignedByte())
-                        .setTime(buf.readUnsignedByte(), buf.readUnsignedByte(), buf.readUnsignedByte());
-                getLastLocation(position, dateBuilder.getDate());
-            }
-            short alarmType = buf.readUnsignedByte();
-            switch (alarmType) {
-                case 0x01:
-                    position.set(Position.KEY_ALARM, extendedAlarm ? Position.ALARM_SOS : Position.ALARM_GENERAL);
-                    break;
-                case 0x80:
-                    position.set(Position.KEY_ALARM, Position.ALARM_VIBRATION);
-                    break;
-                case 0x87:
-                    position.set(Position.KEY_ALARM, Position.ALARM_OVERSPEED);
-                    break;
-                case 0x90:
-                    position.set(Position.KEY_ALARM, Position.ALARM_ACCELERATION);
-                    break;
-                case 0x91:
-                    position.set(Position.KEY_ALARM, Position.ALARM_BRAKING);
-                    break;
-                case 0x92:
-                    position.set(Position.KEY_ALARM, Position.ALARM_CORNERING);
-                    break;
-                case 0x93:
-                    position.set(Position.KEY_ALARM, Position.ALARM_ACCIDENT);
-                    break;
-                default:
-                    position.set(Position.KEY_ALARM, Position.ALARM_GENERAL);
-                    break;
-            }
-        } else {
-
-            if (dataLength > 0) {
-                buf.skipBytes(dataLength);
-            }
-            if (type != MSG_COMMAND_0 && type != MSG_COMMAND_1 && type != MSG_COMMAND_2) {
-                sendResponse(channel, false, type, buf.getShort(buf.writerIndex() - 6), null);
-            }
-            return null;
-
-        }
-
-        if (hasLanguage(type)) {
-            buf.readUnsignedShort();
-        }
-
-        if (type == MSG_GPS_LBS_STATUS_3 || type == MSG_FENCE_MULTI) {
-            position.set(Position.KEY_GEOFENCE, buf.readUnsignedByte());
-        }
-
-        sendResponse(channel, false, type, buf.getShort(buf.writerIndex() - 6), null);
-
-        return position;
-    }
-
-    private void decodeHeartbeat(ByteBuf buf, Position position) {
-
-        getLastLocation(position, null);
-
-        buf.readUnsignedByte(); // information content
-        buf.readUnsignedShort(); // satellites
-        buf.readUnsignedByte(); // alarm
-        buf.readUnsignedByte(); // language
-
-        position.set(Position.KEY_BATTERY_LEVEL, buf.readUnsignedByte());
-
-        buf.readUnsignedByte(); // working mode
-        buf.readUnsignedShort(); // working voltage
-        buf.readUnsignedByte(); // reserved
-        buf.readUnsignedShort(); // working times
-        buf.readUnsignedShort(); // working time
-
-        int value = buf.readUnsignedShort();
-        double temperature = BitUtil.to(value, 15) * 0.1;
-        position.set(Position.PREFIX_TEMP + 1, BitUtil.check(value, 15) ? temperature : -temperature);
-
-    }
-
-    private void decodeBasicUniversal(ByteBuf buf, DeviceSession deviceSession, int type, Position position) {
-
-        if (hasGps(type)) {
-            decodeGps(position, buf, false, deviceSession.getTimeZone());
-        } else {
-            getLastLocation(position, null);
-        }
-
-        if (hasLbs(type)) {
-            decodeLbs(position, buf, hasStatus(type));
-        }
-
-        if (hasStatus(type)) {
-            decodeStatus(position, buf);
-        }
-
-        if (type == MSG_GPS_LBS_1 && buf.readableBytes() > 75 + 6) {
-            position.set(Position.KEY_ODOMETER, buf.readUnsignedInt());
-            String data = buf.readCharSequence(buf.readUnsignedByte(), StandardCharsets.US_ASCII).toString();
-            buf.readUnsignedByte(); // alarm
-            buf.readUnsignedByte(); // swiped
-            position.set("driverLicense", data.trim());
-        }
-
-        if (type == MSG_GPS_LBS_1 && buf.readableBytes() == 2 + 6) {
-            int mask = buf.readUnsignedShort();
-            position.set(Position.KEY_IGNITION, BitUtil.check(mask, 8 + 7));
-            position.set(Position.PREFIX_IN + 2, BitUtil.check(mask, 8 + 6));
-            if (BitUtil.check(mask, 8 + 4)) {
-                int value = BitUtil.to(mask, 8 + 1);
-                if (BitUtil.check(mask, 8 + 1)) {
-                    value = -value;
+                if (jc400) {
+                    buf.readUnsignedShort(); // marker
+                    buf.readUnsignedByte(); // version
                 }
-                position.set(Position.PREFIX_TEMP + 1, value);
+                decodeGps(
+                        position, buf, false, jc400, jc400, jc400, jc400,
+                        deviceSession.get(DeviceSession.KEY_TIMEZONE));
             } else {
-                int value = BitUtil.to(mask, 8 + 2);
-                if (BitUtil.check(mask, 8 + 5)) {
-                    position.set(Position.PREFIX_ADC + 1, value);
-                } else {
-                    position.set(Position.PREFIX_ADC + 1, value * 0.1);
-                }
+                getLastLocation(position, decodeDate(buf, deviceSession));
             }
-        }
-
-        if ((type == MSG_GPS_LBS_2 || type == MSG_GPS_LBS_3) && buf.readableBytes() >= 3 + 6) {
-            position.set(Position.KEY_IGNITION, buf.readUnsignedByte() > 0);
-            position.set(Position.KEY_EVENT, buf.readUnsignedByte()); // reason
-            position.set(Position.KEY_ARCHIVE, buf.readUnsignedByte() > 0);
-        }
-
-        if (type == MSG_GPS_LBS_3) {
-            int module = buf.readUnsignedShort();
-            int length = buf.readUnsignedByte();
-            switch (module) {
-                case 0x0027:
-                    position.set(Position.KEY_POWER, buf.readUnsignedShort() * 0.01);
-                    break;
-                case 0x002E:
-                    position.set(Position.KEY_ODOMETER, buf.readUnsignedInt());
-                    break;
-                case 0x003B:
-                    position.setAccuracy(buf.readUnsignedShort() * 0.01);
-                    break;
-                default:
-                    buf.skipBytes(length);
-                    break;
+            if (variant == Variant.JC400) {
+                position.set(Position.KEY_POWER, buf.readUnsignedShort() / 10.0);
             }
-        }
+            short event = buf.readUnsignedByte();
+            position.set(Position.KEY_EVENT, event);
+            position.set("eventData", buf.readUnsignedShort());
+            switch (event) {
+                case 0x01 -> position.addAlarm(extendedAlarm ? Position.ALARM_SOS : Position.ALARM_GENERAL);
+                case 0x0E -> position.addAlarm(Position.ALARM_LOW_POWER);
+                case 0x76 -> position.addAlarm(Position.ALARM_TEMPERATURE);
+                case 0x80 -> position.addAlarm(Position.ALARM_VIBRATION);
+                case 0x87 -> position.addAlarm(Position.ALARM_OVERSPEED);
+                case 0x88 -> position.addAlarm(Position.ALARM_POWER_CUT);
+                case 0x90 -> position.addAlarm(Position.ALARM_ACCELERATION);
+                case 0x91 -> position.addAlarm(Position.ALARM_BRAKING);
+                case 0x92 -> position.addAlarm(Position.ALARM_CORNERING);
+                case 0x93 -> position.addAlarm(Position.ALARM_ACCIDENT);
+            }
 
-        if (buf.readableBytes() == 4 + 6) {
-            position.set(Position.KEY_ODOMETER, buf.readUnsignedInt());
-        }
-    }
+            int filesLength = buf.readableBytes() - 6;
+            if (filesLength > 0) {
+                position.set("eventFiles", buf.readCharSequence(filesLength, StandardCharsets.US_ASCII).toString());
+            }
 
-    private Object decodeExtended(Channel channel, SocketAddress remoteAddress, ByteBuf buf) {
-
-        DeviceSession deviceSession = getDeviceSession(channel, remoteAddress);
-        if (deviceSession == null) {
-            return null;
-        }
-
-        if (deviceSession.getTimeZone() == null) {
-            deviceSession.setTimeZone(getTimeZone(deviceSession.getDeviceId()));
-        }
-
-        Position position = new Position(getProtocolName());
-        position.setDeviceId(deviceSession.getDeviceId());
-
-        buf.readUnsignedShort(); // length
-        int type = buf.readUnsignedByte();
-
-        if (type == MSG_STRING_INFO) {
+        } else if (type == MSG_STRING_INFO) {
 
             buf.readUnsignedInt(); // server flag
             String data;
@@ -954,7 +1218,16 @@ public class Gt06ProtocolDecoder extends BaseProtocolDecoder {
                 data = buf.readSlice(buf.readableBytes() - 6).toString(StandardCharsets.UTF_16BE);
             }
 
-            if (decodeLocationString(position, data) == null) {
+            Parser parser = new Parser(PATTERN_LOCATION, data);
+
+            if (parser.matches()) {
+                position.setValid(true);
+                position.setLatitude(parser.nextCoordinate(Parser.CoordinateFormat.HEM_DEG));
+                position.setLongitude(parser.nextCoordinate(Parser.CoordinateFormat.HEM_DEG));
+                position.setCourse(parser.nextDouble());
+                position.setSpeed(parser.nextDouble());
+                position.setTime(parser.nextDateTime(Parser.DateTimeFormat.YMD_HMS));
+            } else {
                 getLastLocation(position, null);
                 position.set(Position.KEY_RESULT, data);
             }
@@ -968,38 +1241,122 @@ public class Gt06ProtocolDecoder extends BaseProtocolDecoder {
             getLastLocation(position, null);
 
             if (subType == 0x00) {
-                position.set(Position.PREFIX_ADC + 1, buf.readUnsignedShort() * 0.01);
+
+                position.set(Position.PREFIX_ADC + 1, buf.readUnsignedShort() / 100.0);
                 return position;
+
+            } else if (subType == 0x04) {
+
+                CharSequence content = buf.readCharSequence(buf.readableBytes() - 4 - 2, StandardCharsets.US_ASCII);
+                String[] values = content.toString().split(";");
+                for (String value : values) {
+                    String[] pair = value.split("=");
+                    switch (pair[0]) {
+                        case "ALM1":
+                        case "ALM2":
+                        case "ALM3":
+                        case "ALM4":
+                            position.set("alarm" + pair[0].charAt(3) + "Status", Integer.parseInt(pair[1], 16));
+                            break;
+                        case "STA1":
+                            position.set("otherStatus", Integer.parseInt(pair[1], 16));
+                            break;
+                        case "DYD":
+                            position.set("engineStatus", Integer.parseInt(pair[1], 16));
+                            break;
+                        default:
+                            break;
+                    }
+                }
+                return position;
+
             } else if (subType == 0x05) {
+
+                if (buf.readableBytes() >= 6 + 1 + 6) {
+                    position.setDeviceTime(decodeDate(buf, deviceSession));
+                }
+
                 int flags = buf.readUnsignedByte();
                 position.set(Position.KEY_DOOR, BitUtil.check(flags, 0));
                 position.set(Position.PREFIX_IO + 1, BitUtil.check(flags, 2));
                 return position;
+
             } else if (subType == 0x0a) {
-                buf.skipBytes(8); // imei
-                buf.skipBytes(8); // imsi
-                position.set(Position.KEY_ICCID, ByteBufUtil.hexDump(buf.readSlice(10)).replaceAll("f", ""));
+
+                if (buf.readableBytes() > 16) {
+                    buf.skipBytes(8); // imei
+                    buf.skipBytes(8); // imsi
+                }
+                position.set(Position.KEY_ICCID, StringUtil.stripTrailing(
+                        'f', ByteBufUtil.hexDump(buf.readSlice(10))));
                 return position;
+
+            } else if (subType == 0x0b) {
+
+                int contentLength = length - 6;
+                if (contentLength == 1) {
+                    position.set("networkTechnology", buf.readByte() > 0 ? "4G" : "2G");
+                } else if (contentLength == 2) {
+                    position.set(Position.KEY_POWER, buf.readUnsignedShort() / 100.0);
+                }
+                return position;
+
             } else if (subType == 0x0d) {
+
                 if (buf.getByte(buf.readerIndex()) != '!') {
                     buf.skipBytes(6);
                 }
-                return decodeFuelData(position, buf.toString(
+
+                Parser parser = new Parser(PATTERN_FUEL, buf.toString(
                         buf.readerIndex(), buf.readableBytes() - 4 - 2, StandardCharsets.US_ASCII));
-            } else if (subType == 0x1b) {
-                buf.readUnsignedByte(); // header
-                buf.readUnsignedByte(); // type
-                position.set(Position.KEY_DRIVER_UNIQUE_ID, ByteBufUtil.hexDump(buf.readSlice(4)));
-                buf.readUnsignedByte(); // checksum
-                buf.readUnsignedByte(); // footer
+                if (!parser.matches()) {
+                    return null;
+                }
+
+                position.set(Position.PREFIX_TEMP + 1, parser.nextDouble(0));
+                position.set(Position.KEY_FUEL, parser.nextDouble(0));
+
                 return position;
+
+            } else if (subType == 0x15) {
+
+                int count = buf.readUnsignedByte();
+                for (int i = 1; i <= count; i++) {
+                    buf.skipBytes(8); // sensor id
+                    position.set(Position.PREFIX_TEMP + i, buf.readShort() / 100.0);
+                }
+                return position;
+
+            } else if (subType == 0x1b) {
+
+                if (Character.isLetter(buf.getUnsignedByte(buf.readerIndex()))) {
+                    String data = buf.readCharSequence(buf.readableBytes() - 6, StandardCharsets.US_ASCII).toString();
+                    position.set("serial", data.trim());
+                } else {
+                    buf.readUnsignedByte(); // header
+                    buf.readUnsignedByte(); // type
+                    position.set(Position.KEY_DRIVER_UNIQUE_ID, ByteBufUtil.hexDump(buf.readSlice(4)));
+                    buf.readUnsignedByte(); // checksum
+                    buf.readUnsignedByte(); // footer
+                }
+                return position;
+
+            } else if (subType == 0x1e) {
+
+                position.set(Position.PREFIX_TEMP + 1, buf.readInt() / 10.0);
+                position.set(Position.KEY_HUMIDITY, buf.readInt() / 10.0);
+
+                return position;
+
             }
+
+            return null;
 
         } else if (type == MSG_X1_PHOTO_DATA) {
 
             int pictureId = buf.readInt();
 
-            ByteBuf photo = photos.get(pictureId);
+            ByteBuf photo = getMediaBuffer();
 
             buf.readUnsignedInt(); // offset
             buf.readBytes(photo, buf.readUnsignedShort());
@@ -1007,19 +1364,18 @@ public class Gt06ProtocolDecoder extends BaseProtocolDecoder {
             if (photo.writableBytes() > 0) {
                 sendPhotoRequest(channel, pictureId);
             } else {
-                Device device = Context.getDeviceManager().getById(deviceSession.getDeviceId());
-                position.set(
-                        Position.KEY_IMAGE, Context.getMediaManager().writeFile(device.getUniqueId(), photo, "jpg"));
-                photos.remove(pictureId).release();
+                position.set(Position.KEY_IMAGE, writeMediaFile(deviceSession.getUniqueId(), "jpg"));
             }
+
+            return null;
 
         } else if (type == MSG_AZ735_GPS || type == MSG_AZ735_ALARM) {
 
-            if (!decodeGps(position, buf, true, deviceSession.getTimeZone())) {
+            if (!decodeGps(position, buf, true, deviceSession.get(DeviceSession.KEY_TIMEZONE))) {
                 getLastLocation(position, position.getDeviceTime());
             }
 
-            if (decodeLbs(position, buf, true)) {
+            if (decodeLbs(position, buf, type, true)) {
                 position.set(Position.KEY_RSSI, buf.readUnsignedByte());
             }
 
@@ -1031,24 +1387,11 @@ public class Gt06ProtocolDecoder extends BaseProtocolDecoder {
 
             if (type == MSG_AZ735_ALARM) {
                 switch (status) {
-                    case 0xA0:
-                        position.set(Position.KEY_ARMED, true);
-                        break;
-                    case 0xA1:
-                        position.set(Position.KEY_ARMED, false);
-                        break;
-                    case 0xA2:
-                    case 0xA3:
-                        position.set(Position.KEY_ALARM, Position.ALARM_LOW_BATTERY);
-                        break;
-                    case 0xA4:
-                        position.set(Position.KEY_ALARM, Position.ALARM_GENERAL);
-                        break;
-                    case 0xA5:
-                        position.set(Position.KEY_ALARM, Position.ALARM_DOOR);
-                        break;
-                    default:
-                        break;
+                    case 0xA0 -> position.set(Position.KEY_ARMED, true);
+                    case 0xA1 -> position.set(Position.KEY_ARMED, false);
+                    case 0xA2, 0xA3 -> position.addAlarm(Position.ALARM_LOW_BATTERY);
+                    case 0xA4 -> position.addAlarm(Position.ALARM_GENERAL);
+                    case 0xA5 -> position.addAlarm(Position.ALARM_DOOR);
                 }
             }
 
@@ -1060,11 +1403,7 @@ public class Gt06ProtocolDecoder extends BaseProtocolDecoder {
 
         } else if (type == MSG_OBD) {
 
-            DateBuilder dateBuilder = new DateBuilder(deviceSession.getTimeZone())
-                    .setDate(buf.readUnsignedByte(), buf.readUnsignedByte(), buf.readUnsignedByte())
-                    .setTime(buf.readUnsignedByte(), buf.readUnsignedByte(), buf.readUnsignedByte());
-
-            getLastLocation(position, dateBuilder.getDate());
+            getLastLocation(position, decodeDate(buf, deviceSession));
 
             position.set(Position.KEY_IGNITION, buf.readUnsignedByte() > 0);
 
@@ -1073,32 +1412,14 @@ public class Gt06ProtocolDecoder extends BaseProtocolDecoder {
                 String[] values = pair.split("=");
                 if (values.length >= 2) {
                     switch (Integer.parseInt(values[0].substring(0, 2), 16)) {
-                        case 40:
-                            position.set(Position.KEY_ODOMETER, Integer.parseInt(values[1], 16) * 0.01);
-                            break;
-                        case 43:
-                            position.set(Position.KEY_FUEL_LEVEL, Integer.parseInt(values[1], 16) * 0.01);
-                            break;
-                        case 45:
-                            position.set(Position.KEY_COOLANT_TEMP, Integer.parseInt(values[1], 16) * 0.01);
-                            break;
-                        case 53:
-                            position.set(Position.KEY_OBD_SPEED, Integer.parseInt(values[1], 16) * 0.01);
-                            break;
-                        case 54:
-                            position.set(Position.KEY_RPM, Integer.parseInt(values[1], 16) * 0.01);
-                            break;
-                        case 71:
-                            position.set(Position.KEY_FUEL_USED, Integer.parseInt(values[1], 16) * 0.01);
-                            break;
-                        case 73:
-                            position.set(Position.KEY_HOURS, Integer.parseInt(values[1], 16) * 0.01);
-                            break;
-                        case 74:
-                            position.set(Position.KEY_VIN, values[1]);
-                            break;
-                        default:
-                            break;
+                        case 40 -> position.set(Position.KEY_ODOMETER, Integer.parseInt(values[1], 16) / 100.0);
+                        case 43 -> position.set(Position.KEY_FUEL, Integer.parseInt(values[1], 16) / 100.0);
+                        case 45 -> position.set(Position.KEY_COOLANT_TEMP, Integer.parseInt(values[1], 16) / 100.0);
+                        case 53 -> position.set(Position.KEY_OBD_SPEED, Integer.parseInt(values[1], 16) / 100.0);
+                        case 54 -> position.set(Position.KEY_RPM, Integer.parseInt(values[1], 16) / 100.0);
+                        case 71 -> position.set(Position.KEY_FUEL_USED, Integer.parseInt(values[1], 16) / 100.0);
+                        case 73 -> position.set(Position.KEY_HOURS, Integer.parseInt(values[1], 16) / 100.0);
+                        case 74 -> position.set(Position.KEY_VIN, values[1]);
                     }
                 }
             }
@@ -1107,133 +1428,106 @@ public class Gt06ProtocolDecoder extends BaseProtocolDecoder {
 
         } else if (type == MSG_GPS_MODULAR) {
 
-            return decodeExtendedModular(buf, deviceSession);
+            while (buf.readableBytes() > 6) {
+                int moduleType = buf.readUnsignedShort();
+                int moduleLength = buf.readUnsignedShort();
 
-        } else {
-
-            return decodeExtendedOther(channel, buf, deviceSession, type);
-
-        }
-
-        return null;
-    }
-
-    private Object decodeExtendedModular(ByteBuf buf, DeviceSession deviceSession) {
-
-        Position position = new Position(getProtocolName());
-        position.setDeviceId(deviceSession.getDeviceId());
-
-        while (buf.readableBytes() > 6) {
-            int moduleType = buf.readUnsignedShort();
-            int moduleLength = buf.readUnsignedShort();
-
-            switch (moduleType) {
-                case 0x03:
-                    position.set(Position.KEY_ICCID, ByteBufUtil.hexDump(buf.readSlice(10)));
-                    break;
-                case 0x09:
-                    position.set(Position.KEY_SATELLITES, buf.readUnsignedByte());
-                    break;
-                case 0x0a:
-                    position.set(Position.KEY_SATELLITES_VISIBLE, buf.readUnsignedByte());
-                    break;
-                case 0x11:
-                    CellTower cellTower = CellTower.from(
-                            buf.readUnsignedShort(),
-                            buf.readUnsignedShort(),
-                            buf.readUnsignedShort(),
-                            buf.readUnsignedMedium(),
-                            buf.readUnsignedByte());
-                    if (cellTower.getCellId() > 0) {
-                        position.setNetwork(new Network(cellTower));
+                switch (moduleType) {
+                    case 0x03 -> position.set(Position.KEY_ICCID, ByteBufUtil.hexDump(buf.readSlice(10)));
+                    case 0x09 -> position.set(Position.KEY_SATELLITES, buf.readUnsignedByte());
+                    case 0x0a -> position.set(Position.KEY_SATELLITES_VISIBLE, buf.readUnsignedByte());
+                    case 0x11 -> {
+                        CellTower cellTower = CellTower.from(
+                                buf.readUnsignedShort(),
+                                buf.readUnsignedShort(),
+                                buf.readUnsignedShort(),
+                                buf.readUnsignedMedium(),
+                                buf.readUnsignedByte());
+                        if (cellTower.getCellId() > 0) {
+                            position.setNetwork(new Network(cellTower));
+                        }
                     }
-                    break;
-                case 0x18:
-                    position.set(Position.KEY_BATTERY, buf.readUnsignedShort() * 0.01);
-                    break;
-                case 0x28:
-                    position.set(Position.KEY_HDOP, buf.readUnsignedByte() * 0.1);
-                    break;
-                case 0x29:
-                    position.set(Position.KEY_INDEX, buf.readUnsignedInt());
-                    break;
-                case 0x2a:
-                    int input = buf.readUnsignedByte();
-                    position.set(Position.KEY_DOOR, BitUtil.to(input, 4) > 0);
-                    position.set("tamper", BitUtil.from(input, 4) > 0);
-                    break;
-                case 0x2b:
-                    int event = buf.readUnsignedByte();
-                    switch (event) {
-                        case 0x11:
-                            position.set(Position.KEY_ALARM, Position.ALARM_LOW_BATTERY);
-                            break;
-                        case 0x12:
-                            position.set(Position.KEY_ALARM, Position.ALARM_LOW_POWER);
-                            break;
-                        case 0x13:
-                            position.set(Position.KEY_ALARM, Position.ALARM_POWER_CUT);
-                            break;
-                        case 0x14:
-                            position.set(Position.KEY_ALARM, Position.ALARM_REMOVING);
-                            break;
-                        default:
-                            break;
+                    case 0x18 -> position.set(Position.KEY_BATTERY, buf.readUnsignedShort() / 100.0);
+                    case 0x28 -> position.set(Position.KEY_HDOP, buf.readUnsignedByte() / 10.0);
+                    case 0x29 -> position.set(Position.KEY_INDEX, buf.readUnsignedInt());
+                    case 0x2a -> {
+                        int input = buf.readUnsignedByte();
+                        position.set(Position.KEY_DOOR, BitUtil.to(input, 4) > 0);
+                        position.set("tamper", BitUtil.from(input, 4) > 0);
                     }
-                    position.set(Position.KEY_EVENT, event);
-                    break;
-                case 0x2e:
-                    position.set(Position.KEY_ODOMETER, buf.readUnsignedIntLE());
-                    break;
-                case 0x33:
-                    position.setTime(new Date(buf.readUnsignedInt() * 1000));
-                    position.set(Position.KEY_SATELLITES, buf.readUnsignedByte());
-                    position.setAltitude(buf.readShort());
+                    case 0x2b -> position.set("bootReason", buf.readUnsignedByte());
+                    case 0x2e -> position.set(Position.KEY_ODOMETER, buf.readUnsignedIntLE());
+                    case 0x33 -> {
+                        position.setTime(new Date(buf.readUnsignedInt() * 1000));
+                        position.set(Position.KEY_SATELLITES, buf.readUnsignedByte());
+                        position.setAltitude(buf.readShort());
 
-                    double latitude = buf.readUnsignedInt() / 60.0 / 30000.0;
-                    double longitude = buf.readUnsignedInt() / 60.0 / 30000.0;
-                    position.setSpeed(UnitsConverter.knotsFromKph(buf.readUnsignedByte()));
+                        double latitude = buf.readUnsignedInt() / 60.0 / 30000.0;
+                        double longitude = buf.readUnsignedInt() / 60.0 / 30000.0;
+                        position.setSpeed(UnitsConverter.knotsFromKph(buf.readUnsignedByte()));
 
-                    int flags = buf.readUnsignedShort();
-                    position.setCourse(BitUtil.to(flags, 10));
-                    position.setValid(BitUtil.check(flags, 12));
+                        int flags = buf.readUnsignedShort();
+                        position.setCourse(BitUtil.to(flags, 10));
+                        position.setValid(BitUtil.check(flags, 12));
 
-                    if (!BitUtil.check(flags, 10)) {
-                        latitude = -latitude;
+                        if (!BitUtil.check(flags, 10)) {
+                            latitude = -latitude;
+                        }
+                        if (BitUtil.check(flags, 11)) {
+                            longitude = -longitude;
+                        }
+
+                        position.setLatitude(latitude);
+                        position.setLongitude(longitude);
                     }
-                    if (BitUtil.check(flags, 11)) {
-                        longitude = -longitude;
+                    case 0x34 -> {
+                        int event = buf.readUnsignedByte();
+                        switch (event) {
+                            case 0x10 -> position.addAlarm(Position.ALARM_DOOR);
+                            case 0x12 -> position.addAlarm(Position.ALARM_REMOVING);
+                            case 0x14 -> position.addAlarm(Position.ALARM_GEOFENCE_ENTER);
+                            case 0x15 -> position.addAlarm(Position.ALARM_GEOFENCE_EXIT);
+                            case 0x16 -> position.addAlarm(Position.ALARM_TEMPERATURE);
+                            case 0x1A -> position.addAlarm(Position.ALARM_LOW_BATTERY);
+                            case 0x1B -> position.addAlarm(Position.ALARM_OVERSPEED);
+                            case 0x1C -> position.addAlarm(Position.ALARM_POWER_ON);
+                            case 0x1D -> position.addAlarm(Position.ALARM_POWER_OFF);
+                            case 0x20 -> position.addAlarm(Position.ALARM_VIBRATION);
+                            case 0x21 -> position.addAlarm(Position.ALARM_POWER_CUT);
+                            case 0x23 -> position.addAlarm(Position.ALARM_TAMPERING);
+                        }
+                        position.set(Position.KEY_EVENT, event);
+                        buf.readUnsignedIntLE(); // time
+                        buf.skipBytes(buf.readUnsignedByte()); // content
                     }
-
-                    position.setLatitude(latitude);
-                    position.setLongitude(longitude);
-                    break;
-                case 0x34:
-                    position.set(Position.KEY_EVENT, buf.readUnsignedByte());
-                    buf.readUnsignedIntLE(); // time
-                    buf.skipBytes(buf.readUnsignedByte()); // content
-                    break;
-                default:
-                    buf.skipBytes(moduleLength);
-                    break;
+                    case 0x7f -> {
+                        position.set("tag1Id", ByteBufUtil.hexDump(buf.readSlice(6)));
+                        position.set("tag1Battery", buf.readUnsignedShort() / 1000.0);
+                        position.set("tag1BatteryLevel", buf.readUnsignedByte());
+                        position.set("tag1Temp", buf.readShort() / 10.0);
+                        position.set("tag1Humidity", buf.readShort());
+                        position.set("tag1Status", buf.readUnsignedByte());
+                    }
+                    default -> buf.skipBytes(moduleLength);
+                }
             }
-        }
 
-        return position;
-    }
+            if (position.getFixTime() == null) {
+                getLastLocation(position, null);
+            }
 
-    private Object decodeExtendedOther(Channel channel, ByteBuf buf, DeviceSession deviceSession, int type) {
+            sendResponse(channel, false, MSG_GPS_MODULAR, buf.readUnsignedShort(), null);
 
-        Position position = null;
+            return position;
 
-        if (type == MSG_MULTIMEDIA || type == MSG_MULTIMEDIA_2) {
+        } else if (type == MSG_MULTIMEDIA) {
 
             buf.skipBytes(8); // serial number
             long timestamp = buf.readUnsignedInt() * 1000;
             buf.skipBytes(4 + 4 + 2 + 1 + 1 + 2); // gps
             buf.skipBytes(2 + 2 + 2 + 2); // cell
 
-            int mediaId = buf.readInt();
+            buf.readInt(); // media id
             int mediaLength = buf.readInt();
             int mediaType = buf.readUnsignedByte();
             int mediaFormat = buf.readUnsignedByte();
@@ -1244,25 +1538,16 @@ public class Gt06ProtocolDecoder extends BaseProtocolDecoder {
 
                 ByteBuf photo;
                 if (buf.readUnsignedShort() == 0) {
-                    photo = Unpooled.buffer(mediaLength);
-                    if (photos.containsKey(mediaId)) {
-                        photos.remove(mediaId).release();
-                    }
-                    photos.put(mediaId, photo);
+                    photo = newMediaBuffer(mediaLength);
                 } else {
-                    photo = photos.get(mediaId);
+                    photo = getMediaBuffer();
                 }
 
                 if (photo != null) {
                     buf.readBytes(photo, buf.readableBytes() - 3 * 2);
                     if (!photo.isWritable()) {
-                        position = new Position(getProtocolName());
-                        position.setDeviceId(deviceSession.getDeviceId());
                         getLastLocation(position, new Date(timestamp));
-                        Device device = Context.getDeviceManager().getById(deviceSession.getDeviceId());
-                        position.set(Position.KEY_IMAGE,
-                                Context.getMediaManager().writeFile(device.getUniqueId(), photo, "jpg"));
-                        photos.remove(mediaId).release();
+                        position.set(Position.KEY_IMAGE, writeMediaFile(deviceSession.getUniqueId(), "jpg"));
                     }
                 }
 
@@ -1274,48 +1559,169 @@ public class Gt06ProtocolDecoder extends BaseProtocolDecoder {
 
         } else if (type == MSG_SERIAL) {
 
-            position = new Position(getProtocolName());
-            position.setDeviceId(deviceSession.getDeviceId());
             getLastLocation(position, null);
 
             buf.readUnsignedByte(); // external device type code
-            int length = buf.readableBytes() - 9; // line break + checksum + index + checksum + footer
 
-            if (length <= 0) {
-                return null;
-            } else if (length < 8) {
-                position.set(
-                        Position.PREFIX_TEMP + 1,
-                        Double.parseDouble(buf.readCharSequence(length - 1, StandardCharsets.US_ASCII).toString()));
+            ByteBuf data = buf.readSlice(buf.readableBytes() - 6); // index + checksum + footer
+            if (BufferUtil.isPrintable(data, data.readableBytes())) {
+                String value = data.readCharSequence(data.readableBytes(), StandardCharsets.US_ASCII).toString();
+                position.set(Position.KEY_RESULT, value.trim());
             } else {
-                buf.readUnsignedByte(); // card type
-                position.set(
-                        Position.KEY_DRIVER_UNIQUE_ID,
-                        buf.readCharSequence(length - 1, StandardCharsets.US_ASCII).toString());
+                position.set(Position.KEY_RESULT, ByteBufUtil.hexDump(data));
             }
 
             return position;
 
+        } else if (type == MSG_PERIPHERAL || type == MSG_DEVICE_STATUS) {
+
+            getLastLocation(position, new Date(buf.readUnsignedInt() * 1000));
+
+            while (buf.readableBytes() > 6) {
+                int statusId = buf.readUnsignedShort();
+                if (type == MSG_PERIPHERAL) {
+                    switch (statusId) {
+                        case 0x000A -> {
+                            int statusLength = buf.readUnsignedShort();
+                            buf.readUnsignedByte(); // mac address type
+                            position.set("mac", ByteBufUtil.hexDump(buf.readSlice(6)));
+                            int event = buf.readUnsignedByte();
+                            position.set(Position.KEY_EVENT, event);
+                            int eventData = buf.readUnsignedByte();
+                            position.set("eventData", event > 0 ? eventData : null);
+                            position.set("dataType", buf.readUnsignedByte());
+                            position.set("dataDetails", ByteBufUtil.hexDump(buf.readSlice(statusLength - 10)));
+                        }
+                        case 0x000C -> {
+                            buf.readUnsignedByte(); // length
+                            position.set("externalBatteryLevel", buf.readUnsignedByte());
+                            position.set("externalBatteryCharge", buf.readUnsignedByte() > 0 ? true : null);
+                            position.set("externalBatteryCycles", buf.readUnsignedShort());
+                            buf.skipBytes(6);
+                        }
+                        default -> {
+                            int statusLength = buf.readUnsignedByte();
+                            buf.skipBytes(statusLength == 0 ? buf.readUnsignedByte() : statusLength);
+                        }
+                    }
+                } else {
+                    int statusLength = buf.readUnsignedByte();
+                    switch (statusId) {
+                        case 0x0001 -> {
+                            int motionStatus = buf.readUnsignedByte();
+                            position.set(Position.KEY_MOTION, motionStatus == 0x02 || motionStatus == 0x04);
+                        }
+                        case 0x0002 -> position.set(Position.KEY_ARMED, buf.readUnsignedByte() > 0);
+                        case 0x0004 -> position.set(Position.KEY_IGNITION, buf.readUnsignedByte() > 0);
+                        case 0x0005 -> position.set(Position.KEY_POWER, buf.readUnsignedShort() / 100.0);
+                        case 0x0007 -> position.set(Position.KEY_CHARGE, buf.readUnsignedByte() > 0);
+                        case 0x000A -> position.set("chargeVoltage", buf.readUnsignedShort());
+                        case 0x000B -> position.set("batteryTemp", buf.readUnsignedShort() / 10.0);
+                        default -> buf.skipBytes(statusLength);
+                    }
+                }
+            }
+
+            sendResponse(channel, false, type, buf.getShort(buf.writerIndex() - 6), null);
+
+            return position;
+
+        } else if (type == MSG_GPS_LBS_8) {
+
+            decodeGps(position, buf, false, deviceSession.get(DeviceSession.KEY_TIMEZONE));
+
+            buf.readUnsignedByte(); // data upload mode
+            buf.readUnsignedByte(); // re-upload
+
+            decodeLbs(position, buf, type, false);
+
+            return position;
+
+        } else {
+
+            if (dataLength > 0) {
+                buf.skipBytes(dataLength);
+            }
+            if (!extended && type != MSG_COMMAND_0 && type != MSG_COMMAND_1 && type != MSG_COMMAND_2) {
+                sendResponse(channel, false, type, buf.getShort(buf.writerIndex() - 6), null);
+            }
+            return null;
+
         }
 
-        return null;
+        sendResponse(channel, false, type, buf.getShort(buf.writerIndex() - 6), null);
+
+        return position;
     }
 
-    @Override
-    protected Object decode(
-            Channel channel, SocketAddress remoteAddress, Object msg) throws Exception {
+    private static Date decodeDate(ByteBuf buf, DeviceSession deviceSession) {
+        DateBuilder dateBuilder = new DateBuilder((TimeZone) deviceSession.get(DeviceSession.KEY_TIMEZONE))
+                .setDate(buf.readUnsignedByte(), buf.readUnsignedByte(), buf.readUnsignedByte())
+                .setTime(buf.readUnsignedByte(), buf.readUnsignedByte(), buf.readUnsignedByte());
+        return dateBuilder.getDate();
+    }
 
-        ByteBuf buf = (ByteBuf) msg;
-
-        int header = buf.readShort();
-
+    private void decodeVariant(ByteBuf buf) {
+        int header = buf.getUnsignedShort(buf.readerIndex());
+        int length;
+        int type;
         if (header == 0x7878) {
-            return decodeBasic(channel, remoteAddress, buf);
-        } else if (header == 0x7979) {
-            return decodeExtended(channel, remoteAddress, buf);
+            length = buf.getUnsignedByte(buf.readerIndex() + 2);
+            type = buf.getUnsignedByte(buf.readerIndex() + 2 + 1);
+        } else {
+            length = buf.getUnsignedShort(buf.readerIndex() + 2);
+            type = buf.getUnsignedByte(buf.readerIndex() + 2 + 2);
         }
 
-        return null;
+        if (header == 0x7878 && type == MSG_GPS_LBS_1 && length == 0x24) {
+            variant = Variant.VXT01;
+        } else if (header == 0x7878 && type == MSG_GPS_LBS_STATUS_1 && length == 0x24) {
+            variant = Variant.VXT01;
+        } else if (header == 0x7878 && type == MSG_LBS_MULTIPLE_3 && length == 0x31) {
+            variant = Variant.WANWAY_S20;
+        } else if (header == 0x7878 && type == MSG_LBS_MULTIPLE_3 && length == 0x2e) {
+            variant = Variant.SR411_MINI;
+        } else if (header == 0x7878 && type == MSG_GPS_LBS_1 && length >= 0x71) {
+            variant = Variant.GT06E_CARD;
+        } else if (header == 0x7878 && type == MSG_GPS_LBS_1 && length == 0x21) {
+            variant = Variant.BENWAY;
+        } else if (header == 0x7878 && type == MSG_GPS_LBS_1 && length == 0x2b) {
+            variant = Variant.S5;
+        } else if (header == 0x7878 && type == MSG_LBS_STATUS && length >= 0x17) {
+            variant = Variant.SPACE10X;
+        } else if (header == 0x7878 && type == MSG_STATUS && length == 0x13) {
+            variant = Variant.OBD6;
+        } else if (header == 0x7878 && type == MSG_GPS_LBS_1 && length == 0x29) {
+            variant = Variant.WETRUST;
+        } else if (header == 0x7878 && type == MSG_ALARM && buf.getUnsignedShort(buf.readerIndex() + 4) == 0xffff) {
+            variant = Variant.JC400;
+        } else if (header == 0x7878 && type == MSG_LBS_3 && length == 0x37) {
+            variant = Variant.SL4X;
+        } else if (header == 0x7878 && type == MSG_GPS_LBS_5 && length == 0x2a) {
+            variant = Variant.SL4X;
+        } else if (header == 0x7878 && type == MSG_GPS_LBS_STATUS_4 && length == 0x27) {
+            variant = Variant.SL4X;
+        } else if (header == 0x7878 && type == MSG_GPS_LBS_STATUS_4 && length == 0x29) {
+            variant = Variant.SL4X;
+        } else if (header == 0x7878 && type == MSG_GPS_LBS_2 && length == 0x2f) {
+            variant = Variant.SEEWORLD;
+        } else if (header == 0x7878 && type == MSG_GPS_LBS_STATUS_1 && length == 0x26) {
+            variant = Variant.SEEWORLD;
+        } else if (header == 0x7878 && type == MSG_STATUS_3 && length == 0x0c) {
+            variant = Variant.SEEWORLD;
+        } else if (header == 0x7878 && type == MSG_STATUS_3 && length == 0x18) {
+            variant = Variant.SEEWORLD;
+        } else if (header == 0x7878 && type == MSG_GPS_LBS_RFID && length == 0x28) {
+            variant = Variant.RFID;
+        } else if (header == 0x7878 && type == MSG_GPS_LBS_STATUS_5 && length == 0x40) {
+            variant = Variant.LW4G;
+        } else if (header == 0x7878 && type == MSG_LOCATION_RFID && length == 0x35) {
+            variant = Variant.TRX16I;
+        } else if (header == 0x7878 && type == MSG_GPS_LBS_STATUS_1 && length == 0x2D) {
+            variant = Variant.TRX16I;
+        } else {
+            variant = Variant.STANDARD;
+        }
     }
 
 }

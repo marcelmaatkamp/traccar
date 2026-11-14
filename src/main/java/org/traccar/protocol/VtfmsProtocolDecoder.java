@@ -17,12 +17,12 @@ package org.traccar.protocol;
 
 import io.netty.channel.Channel;
 import org.traccar.BaseProtocolDecoder;
-import org.traccar.DeviceSession;
 import org.traccar.Protocol;
 import org.traccar.helper.Parser;
 import org.traccar.helper.PatternBuilder;
 import org.traccar.helper.UnitsConverter;
 import org.traccar.model.Position;
+import org.traccar.session.DeviceSession;
 
 import java.net.SocketAddress;
 import java.util.regex.Pattern;
@@ -77,20 +77,14 @@ public class VtfmsProtocolDecoder extends BaseProtocolDecoder {
             .compile();
 
     private String decodeAlarm(int value) {
-        switch (value) {
-            case 10:
-                return Position.ALARM_OVERSPEED;
-            case 14:
-                return Position.ALARM_POWER_CUT;
-            case 15:
-                return Position.ALARM_POWER_RESTORED;
-            case 32:
-                return Position.ALARM_BRAKING;
-            case 33:
-                return Position.ALARM_ACCELERATION;
-            default:
-                return null;
-        }
+        return switch (value) {
+            case 10 -> Position.ALARM_OVERSPEED;
+            case 14 -> Position.ALARM_POWER_CUT;
+            case 15 -> Position.ALARM_POWER_RESTORED;
+            case 32 -> Position.ALARM_BRAKING;
+            case 33 -> Position.ALARM_ACCELERATION;
+            default -> null;
+        };
     }
 
     private double convertToDegrees(double value) {
@@ -115,7 +109,7 @@ public class VtfmsProtocolDecoder extends BaseProtocolDecoder {
         Position position = new Position(getProtocolName());
         position.setDeviceId(deviceSession.getDeviceId());
 
-        position.set(Position.KEY_ALARM, decodeAlarm(parser.nextInt()));
+        position.addAlarm(decodeAlarm(parser.nextInt()));
         position.set(Position.KEY_RSSI, parser.nextInt());
         position.set(Position.KEY_SATELLITES, parser.nextInt());
 
@@ -150,7 +144,7 @@ public class VtfmsProtocolDecoder extends BaseProtocolDecoder {
         position.set(Position.KEY_ODOMETER, parser.nextInt() * 100);
         position.set(Position.KEY_CHARGE, parser.next().equals("1"));
         position.set(Position.KEY_POWER, parser.nextDouble());
-        position.set(Position.KEY_FUEL_LEVEL, parser.nextInt());
+        position.set(Position.KEY_FUEL, parser.nextInt());
         position.set(Position.PREFIX_ADC + 1, parser.nextDouble());
         position.set(Position.PREFIX_ADC + 2, parser.nextDouble());
         position.set(Position.PREFIX_IN + 1, parser.nextInt());

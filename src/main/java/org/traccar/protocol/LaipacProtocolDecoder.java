@@ -17,19 +17,21 @@ package org.traccar.protocol;
 
 import io.netty.channel.Channel;
 import org.traccar.BaseProtocolDecoder;
-import org.traccar.Context;
-import org.traccar.DeviceSession;
 import org.traccar.NetworkMessage;
 import org.traccar.Protocol;
+import org.traccar.helper.BitUtil;
 import org.traccar.helper.Checksum;
 import org.traccar.helper.DateBuilder;
 import org.traccar.helper.Parser;
 import org.traccar.helper.PatternBuilder;
+import org.traccar.helper.model.AttributeUtil;
 import org.traccar.model.CellTower;
 import org.traccar.model.Network;
 import org.traccar.model.Position;
+import org.traccar.session.DeviceSession;
 
 import java.net.SocketAddress;
+import java.util.Locale;
 import java.util.regex.Pattern;
 
 public class LaipacProtocolDecoder extends BaseProtocolDecoder {
@@ -81,73 +83,59 @@ public class LaipacProtocolDecoder extends BaseProtocolDecoder {
             .compile();
 
     private String decodeAlarm(String event) {
-        switch (event) {
-            case "Z":
-                return Position.ALARM_LOW_BATTERY;
-            case "Y":
-                return Position.ALARM_TOW;
-            case "X":
-                return Position.ALARM_GEOFENCE_ENTER;
-            case "T":
-                return Position.ALARM_TAMPERING;
-            case "H":
-                return Position.ALARM_POWER_OFF;
-            case "8":
-                return Position.ALARM_SHOCK;
-            case "7":
-            case "4":
-                return Position.ALARM_GEOFENCE_EXIT;
-            case "6":
-                return Position.ALARM_OVERSPEED;
-            case "5":
-                return Position.ALARM_POWER_CUT;
-            case "3":
-                return Position.ALARM_SOS;
-            default:
-                return null;
-        }
+        return switch (event) {
+            case "Z" -> Position.ALARM_LOW_BATTERY;
+            case "Y" -> Position.ALARM_TOW;
+            case "X" -> Position.ALARM_GEOFENCE_ENTER;
+            case "T" -> Position.ALARM_TAMPERING;
+            case "H" -> Position.ALARM_POWER_OFF;
+            case "8" -> Position.ALARM_VIBRATION;
+            case "7", "4" -> Position.ALARM_GEOFENCE_EXIT;
+            case "6" -> Position.ALARM_OVERSPEED;
+            case "5" -> Position.ALARM_POWER_CUT;
+            case "3" -> Position.ALARM_SOS;
+            default -> null;
+        };
     }
 
-    private String decodeEvent(String event, Position position) {
+    private String decodeEvent(String event, Position position, String model) {
 
         if (event.length() == 1) {
             char inputStatus = event.charAt(0);
             if (inputStatus >= 'A' && inputStatus <= 'D') {
                 int inputStatusInt = inputStatus - 'A';
-                position.set(Position.PREFIX_IN + 1, inputStatusInt & 1);
-                position.set(Position.PREFIX_IN + 2, inputStatusInt & 2);
+                position.set(Position.PREFIX_IN + 1, BitUtil.check(inputStatusInt, 0));
+                position.set(Position.PREFIX_IN + 2, BitUtil.check(inputStatusInt, 1));
+                if ("SF-Lite".equals(model)) {
+                    position.set(Position.PREFIX_IN + 3, false);
+                }
+                return null;
+            } else if (inputStatus >= 'O' && inputStatus <= 'R') {
+                int inputStatusInt = inputStatus - 'O';
+                position.set(Position.PREFIX_IN + 1, BitUtil.check(inputStatusInt, 0));
+                position.set(Position.PREFIX_IN + 2, BitUtil.check(inputStatusInt, 1));
+                if ("SF-Lite".equals(model)) {
+                    position.set(Position.PREFIX_IN + 3, true);
+                }
                 return null;
             }
         }
 
         return event;
+
     }
 
     private void sendEventResponse(
             String event, String devicePassword, Channel channel, SocketAddress remoteAddress) {
 
         String responseCode = null;
-
         switch (event) {
-            case "3":
-                responseCode = "d";
-                break;
-            case "S":
-            case "T":
-                responseCode = "t";
-                break;
-            case "X":
-            case "4":
-                responseCode = "x";
-                break;
-            case "Y":
-                responseCode = "y";
-                break;
-            case "Z":
-                responseCode = "z";
-                break;
-            default:
-                break;
+            case "3" -> responseCode = "d";
+            case "M" -> responseCode = "m";
+            case "S", "T" -> responseCode = "t";
+            case "X", "4" -> responseCode = "x";
+            case "Y" -> responseCode = "y";
+            case "Z" -> responseCode = "z";
         }
 
         if (responseCode != null) {
@@ -178,7 +166,7 @@ public class LaipacProtocolDecoder extends BaseProtocolDecoder {
         }
 
         DeviceSession deviceSession =
-            getDeviceSession(channel, remoteAddress, parser.next());
+                getDeviceSession(channel, remoteAddress, parser.next());
         if (deviceSession == null) {
             return null;
         }
@@ -204,10 +192,12 @@ public class LaipacProtocolDecoder extends BaseProtocolDecoder {
         }
 
         DeviceSession deviceSession =
-            getDeviceSession(channel, remoteAddress, parser.next());
+                getDeviceSession(channel, remoteAddress, parser.next());
         if (deviceSession == null) {
             return null;
         }
+
+        String model = getDeviceModel(deviceSession);
 
         Position position = new Position(getProtocolName());
 
@@ -216,7 +206,7 @@ public class LaipacProtocolDecoder extends BaseProtocolDecoder {
                 .setTime(parser.nextInt(0), parser.nextInt(0), parser.nextInt(0));
 
         String status = parser.next();
-        String upperCaseStatus = status.toUpperCase();
+        String upperCaseStatus = status.toUpperCase(Locale.ROOT);
         position.setValid(upperCaseStatus.equals("A") || upperCaseStatus.equals("R") || upperCaseStatus.equals("P"));
         position.set(Position.KEY_STATUS, status);
 
@@ -229,13 +219,18 @@ public class LaipacProtocolDecoder extends BaseProtocolDecoder {
         position.setTime(dateBuilder.getDate());
 
         String event = parser.next();
-        position.set(Position.KEY_ALARM, decodeAlarm(event));
-        position.set(Position.KEY_EVENT, decodeEvent(event, position));
-        position.set(Position.KEY_BATTERY, Double.parseDouble(parser.next().replaceAll("\\.", "")) * 0.001);
+        position.addAlarm(decodeAlarm(event));
+        position.set(Position.KEY_EVENT, decodeEvent(event, position, model));
+        position.set(Position.KEY_BATTERY, Double.parseDouble(parser.next().replaceAll("\\.", "")) / 1000.0);
         position.set(Position.KEY_ODOMETER, parser.nextDouble() * 1000);
         position.set(Position.KEY_GPS, parser.nextInt());
-        position.set(Position.PREFIX_ADC + 1, parser.nextDouble() * 0.001);
-        position.set(Position.PREFIX_ADC + 2, parser.nextDouble() * 0.001);
+        position.set(Position.PREFIX_ADC + 1, parser.nextDouble() / 1000.0);
+
+        if ("AVL110".equals(model) || "AVL120".equals(model)) {
+            position.set(Position.PREFIX_ADC + 2, parser.nextDouble() / 1000.0);
+        } else {
+            parser.next();
+        }
 
         Integer lac = parser.nextHexInt();
         Integer cid = parser.nextHexInt();
@@ -253,8 +248,8 @@ public class LaipacProtocolDecoder extends BaseProtocolDecoder {
 
             sendAcknowledge(status, event, checksum, channel, remoteAddress);
 
-            String devicePassword = Context.getIdentityManager()
-                .getDevicePassword(deviceSession.getDeviceId(), getProtocolName(), DEFAULT_DEVICE_PASSWORD);
+            String devicePassword = AttributeUtil.getDevicePassword(
+                    getCacheManager(), deviceSession.getDeviceId(), getProtocolName(), DEFAULT_DEVICE_PASSWORD);
             sendEventResponse(event, devicePassword, channel, remoteAddress);
         }
 
@@ -263,7 +258,7 @@ public class LaipacProtocolDecoder extends BaseProtocolDecoder {
 
     @Override
     protected Object decode(
-        Channel channel, SocketAddress remoteAddress, Object msg) throws Exception {
+            Channel channel, SocketAddress remoteAddress, Object msg) throws Exception {
 
         String sentence = (String) msg;
 

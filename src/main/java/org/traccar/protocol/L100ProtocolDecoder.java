@@ -17,7 +17,6 @@ package org.traccar.protocol;
 
 import io.netty.channel.Channel;
 import org.traccar.BaseProtocolDecoder;
-import org.traccar.DeviceSession;
 import org.traccar.NetworkMessage;
 import org.traccar.Protocol;
 import org.traccar.helper.Checksum;
@@ -28,6 +27,7 @@ import org.traccar.helper.PatternBuilder;
 import org.traccar.model.CellTower;
 import org.traccar.model.Network;
 import org.traccar.model.Position;
+import org.traccar.session.DeviceSession;
 
 import java.net.SocketAddress;
 import java.util.regex.Pattern;
@@ -242,23 +242,15 @@ public class L100ProtocolDecoder extends BaseProtocolDecoder {
         parser.next(); // reserved
 
         switch (parser.nextInt()) {
-            case 0:
-                position.set(Position.KEY_ALARM, Position.ALARM_BRAKING);
-                break;
-            case 2:
-                position.set(Position.KEY_ALARM, Position.ALARM_ACCELERATION);
-                break;
-            case 1:
-                position.set(Position.KEY_ALARM, Position.ALARM_GENERAL);
-                break;
-            default:
-                break;
+            case 0 -> position.addAlarm(Position.ALARM_BRAKING);
+            case 2 -> position.addAlarm(Position.ALARM_ACCELERATION);
+            case 1 -> position.addAlarm(Position.ALARM_GENERAL);
         }
 
         position.set(Position.KEY_CHARGE, parser.nextInt() == 1);
 
         if (parser.nextInt() == 1) {
-            position.set(Position.KEY_ALARM, Position.ALARM_OVERSPEED);
+            position.addAlarm(Position.ALARM_OVERSPEED);
         }
 
         return position;
@@ -314,14 +306,8 @@ public class L100ProtocolDecoder extends BaseProtocolDecoder {
         position.setDeviceId(deviceSession.getDeviceId());
 
         switch (parser.next()) {
-            case "P":
-                position.set(Position.KEY_ALARM, Position.ALARM_SOS);
-                break;
-            case "T":
-                position.set(Position.KEY_ALARM, Position.ALARM_TAMPERING);
-                break;
-            default:
-                break;
+            case "P" -> position.addAlarm(Position.ALARM_SOS);
+            case "T" -> position.addAlarm(Position.ALARM_TAMPERING);
         }
 
         position.setTime(parser.nextDateTime(Parser.DateTimeFormat.DMY_HMS));
@@ -330,7 +316,7 @@ public class L100ProtocolDecoder extends BaseProtocolDecoder {
         position.setLongitude(parser.nextCoordinate(Parser.CoordinateFormat.DEG_HEM));
         position.setSpeed(parser.nextDouble());
 
-        position.set(Position.KEY_BATTERY, parser.nextInt() * 0.001);
+        position.set(Position.KEY_BATTERY, parser.nextInt() / 1000.0);
 
         position.setNetwork(new Network(CellTower.from(
                 parser.nextInt(), parser.nextInt(), parser.nextInt(), parser.nextHexInt())));

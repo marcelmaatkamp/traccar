@@ -21,7 +21,6 @@ import io.netty.buffer.ByteBufUtil;
 import io.netty.buffer.Unpooled;
 import io.netty.channel.Channel;
 import org.traccar.BaseProtocolDecoder;
-import org.traccar.DeviceSession;
 import org.traccar.NetworkMessage;
 import org.traccar.Protocol;
 import org.traccar.helper.BitUtil;
@@ -29,6 +28,7 @@ import org.traccar.helper.Checksum;
 import org.traccar.helper.UnitsConverter;
 import org.traccar.model.Position;
 import org.traccar.protobuf.omnicomm.OmnicommMessageOuterClass;
+import org.traccar.session.DeviceSession;
 
 import java.net.SocketAddress;
 import java.util.Date;
@@ -114,7 +114,7 @@ public class OmnicommProtocolDecoder extends BaseProtocolDecoder {
 
                 if (message.hasGeneral()) {
                     OmnicommMessageOuterClass.OmnicommMessage.General data = message.getGeneral();
-                    position.set(Position.KEY_POWER, data.getUboard() * 0.1);
+                    position.set(Position.KEY_POWER, data.getUboard() / 10.0);
                     position.set(Position.KEY_BATTERY_LEVEL, data.getBatLife());
                     position.set(Position.KEY_IGNITION, BitUtil.check(data.getFLG(), 0));
                     position.set(Position.KEY_RPM, data.getTImp());
@@ -124,11 +124,11 @@ public class OmnicommProtocolDecoder extends BaseProtocolDecoder {
                     OmnicommMessageOuterClass.OmnicommMessage.NAV data = message.getNAV();
                     position.setValid(true);
                     position.setTime(new Date((data.getGPSTime() + 1230768000) * 1000L)); // from 2009-01-01 12:00
-                    position.setLatitude(data.getLAT() * 0.0000001);
-                    position.setLongitude(data.getLON() * 0.0000001);
-                    position.setSpeed(UnitsConverter.knotsFromKph(data.getGPSVel() * 0.1));
+                    position.setLatitude(data.getLAT() / 10000000.0);
+                    position.setLongitude(data.getLON() / 10000000.0);
+                    position.setSpeed(UnitsConverter.knotsFromKph(data.getGPSVel() / 10.0));
                     position.setCourse(data.getGPSDir());
-                    position.setAltitude(data.getGPSAlt() * 0.1);
+                    position.setAltitude(data.getGPSAlt() / 10.0);
                     position.set(Position.KEY_SATELLITES, data.getGPSNSat());
                 }
 

@@ -20,11 +20,11 @@ import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
 import io.netty.channel.Channel;
 import org.traccar.BaseProtocolDecoder;
-import org.traccar.DeviceSession;
 import org.traccar.NetworkMessage;
 import org.traccar.Protocol;
 import org.traccar.helper.BitUtil;
 import org.traccar.model.Position;
+import org.traccar.session.DeviceSession;
 
 import java.net.SocketAddress;
 import java.nio.charset.StandardCharsets;
@@ -112,7 +112,7 @@ public class BlackKiteProtocolDecoder extends BaseProtocolDecoder {
 
                 case TAG_SPEED_COURSE:
                     position.setSpeed(buf.readUnsignedShortLE() * 0.0539957);
-                    position.setCourse(buf.readUnsignedShortLE() * 0.1);
+                    position.setCourse(buf.readUnsignedShortLE() / 10.0);
                     break;
 
                 case TAG_ALTITUDE:
@@ -123,7 +123,7 @@ public class BlackKiteProtocolDecoder extends BaseProtocolDecoder {
                     int status = buf.readUnsignedShortLE();
                     position.set(Position.KEY_IGNITION, BitUtil.check(status, 9));
                     if (BitUtil.check(status, 15)) {
-                        position.set(Position.KEY_ALARM, Position.ALARM_GENERAL);
+                        position.addAlarm(Position.ALARM_GENERAL);
                     }
                     position.set(Position.KEY_CHARGE, BitUtil.check(status, 2));
                     break;
@@ -143,19 +143,11 @@ public class BlackKiteProtocolDecoder extends BaseProtocolDecoder {
                     break;
 
                 case TAG_INPUT_VOLTAGE1:
-                    position.set(Position.PREFIX_ADC + 1, buf.readUnsignedShortLE() / 1000.0);
-                    break;
-
                 case TAG_INPUT_VOLTAGE2:
-                    position.set(Position.PREFIX_ADC + 2, buf.readUnsignedShortLE() / 1000.0);
-                    break;
-
                 case TAG_INPUT_VOLTAGE3:
-                    position.set(Position.PREFIX_ADC + 3, buf.readUnsignedShortLE() / 1000.0);
-                    break;
-
                 case TAG_INPUT_VOLTAGE4:
-                    position.set(Position.PREFIX_ADC + 4, buf.readUnsignedShortLE() / 1000.0);
+                    position.set(
+                            Position.PREFIX_ADC + (tag - TAG_INPUT_VOLTAGE1 + 1), buf.readUnsignedShortLE() / 1000.0);
                     break;
 
                 case TAG_XT1:

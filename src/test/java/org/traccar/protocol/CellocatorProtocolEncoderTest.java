@@ -1,17 +1,17 @@
 package org.traccar.protocol;
 
-import org.junit.Ignore;
-import org.junit.Test;
+import org.junit.jupiter.api.Disabled;
+import org.junit.jupiter.api.Test;
 import org.traccar.ProtocolTest;
 import org.traccar.model.Command;
 
 public class CellocatorProtocolEncoderTest extends ProtocolTest {
 
-    @Ignore
+    @Disabled
     @Test
     public void testEncode() throws Exception {
 
-        var encoder = new CellocatorProtocolEncoder(null);
+        var channel = channel(inject(new CellocatorProtocolEncoder(null)));
 
         Command command = new Command();
         command.setDeviceId(1);
@@ -19,7 +19,8 @@ public class CellocatorProtocolEncoderTest extends ProtocolTest {
         command.set(Command.KEY_INDEX, 0);
         command.set(Command.KEY_DATA, "1");
 
-        verifyCommand(encoder, command, binary("4D434750000000000000000000000303101000000000000026"));
+        verifyEncode(channel, command,
+                binary("4D434750000000000000000000000303101000000000000026"));
 
     }
 

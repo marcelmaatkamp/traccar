@@ -19,14 +19,18 @@ import io.netty.handler.codec.LengthFieldBasedFrameDecoder;
 import org.traccar.BaseProtocol;
 import org.traccar.PipelineBuilder;
 import org.traccar.TrackerServer;
+import org.traccar.config.Config;
+
+import jakarta.inject.Inject;
 
 public class Tk102Protocol extends BaseProtocol {
 
-    public Tk102Protocol() {
-        addServer(new TrackerServer(false, getName()) {
+    @Inject
+    public Tk102Protocol(Config config) {
+        addServer(new TrackerServer(config, getName(), false) {
             @Override
-            protected void addProtocolHandlers(PipelineBuilder pipeline) {
-                pipeline.addLast(new LengthFieldBasedFrameDecoder(1024, 1 + 1 + 10, 1, 1, 0));
+            protected void addProtocolHandlers(PipelineBuilder pipeline, Config config) {
+                pipeline.addLast(new LengthFieldBasedFrameDecoder(MAX_FRAME_LENGTH, 1 + 1 + 10, 1, 1, 0));
                 pipeline.addLast(new Tk102ProtocolDecoder(Tk102Protocol.this));
             }
         });

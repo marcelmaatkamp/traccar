@@ -1,23 +1,30 @@
 package org.traccar.protocol;
 
-import org.junit.Test;
+import org.junit.jupiter.api.Test;
 import org.traccar.ProtocolTest;
 import org.traccar.model.Command;
-
-import static org.junit.Assert.assertEquals;
 
 public class EasyTrackProtocolEncoderTest extends ProtocolTest {
 
     @Test
-    public void testEncodeEngineStop() {
+    public void testEncodeEngineStop() throws Exception {
 
-        var encoder = new EasyTrackProtocolEncoder(null);
+        var channel = channel(inject(new EasyTrackProtocolEncoder(null)));
 
         Command command = new Command();
         command.setDeviceId(1);
         command.setType(Command.TYPE_ENGINE_STOP);
 
-        assertEquals("*ET,123456789012345,FD,Y1#", encoder.encodeCommand(command));
+        verifyEncode(channel, command,
+                text("*ET,123456789012345,FD,Y1#"));
+
+        command = new Command();
+        command.setDeviceId(1);
+        command.setType(Command.TYPE_CUSTOM);
+        command.set(Command.KEY_DATA, "SPEED120");
+
+        verifyEncode(channel, command,
+                text("*ET,123456789012345,KS,SPEED120#"));
 
     }
 

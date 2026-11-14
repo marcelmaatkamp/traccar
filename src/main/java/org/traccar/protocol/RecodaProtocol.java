@@ -19,15 +19,20 @@ import io.netty.handler.codec.LengthFieldBasedFrameDecoder;
 import org.traccar.BaseProtocol;
 import org.traccar.PipelineBuilder;
 import org.traccar.TrackerServer;
+import org.traccar.config.Config;
 
+import jakarta.inject.Inject;
 import java.nio.ByteOrder;
+
 public class RecodaProtocol extends BaseProtocol {
 
-    public RecodaProtocol() {
-        addServer(new TrackerServer(false, getName()) {
+    @Inject
+    public RecodaProtocol(Config config) {
+        addServer(new TrackerServer(config, getName(), false) {
             @Override
-            protected void addProtocolHandlers(PipelineBuilder pipeline) {
-                pipeline.addLast(new LengthFieldBasedFrameDecoder(ByteOrder.LITTLE_ENDIAN, 1024, 4, 4, -8, 0, true));
+            protected void addProtocolHandlers(PipelineBuilder pipeline, Config config) {
+                pipeline.addLast(new LengthFieldBasedFrameDecoder(
+                        ByteOrder.LITTLE_ENDIAN, MAX_FRAME_LENGTH, 4, 4, -8, 0, true));
                 pipeline.addLast(new RecodaProtocolDecoder(RecodaProtocol.this));
             }
         });

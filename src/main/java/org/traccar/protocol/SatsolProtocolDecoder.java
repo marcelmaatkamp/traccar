@@ -19,13 +19,13 @@ import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
 import io.netty.channel.Channel;
 import org.traccar.BaseProtocolDecoder;
-import org.traccar.DeviceSession;
 import org.traccar.NetworkMessage;
 import org.traccar.Protocol;
 import org.traccar.helper.BitUtil;
 import org.traccar.helper.Checksum;
 import org.traccar.helper.UnitsConverter;
 import org.traccar.model.Position;
+import org.traccar.session.DeviceSession;
 
 import java.net.SocketAddress;
 import java.util.Date;
@@ -67,9 +67,9 @@ public class SatsolProtocolDecoder extends BaseProtocolDecoder {
             position.setDeviceId(deviceSession.getDeviceId());
 
             position.setTime(new Date(buf.readUnsignedIntLE() * 1000));
-            position.setLatitude(buf.readUnsignedIntLE() * 0.000001);
-            position.setLongitude(buf.readUnsignedIntLE() * 0.000001);
-            position.setSpeed(UnitsConverter.knotsFromKph(buf.readUnsignedShortLE() * 0.01));
+            position.setLatitude(buf.readUnsignedIntLE() / 1000000.0);
+            position.setLongitude(buf.readUnsignedIntLE() / 1000000.0);
+            position.setSpeed(UnitsConverter.knotsFromKph(buf.readUnsignedShortLE() / 100.0));
             position.setAltitude(buf.readShortLE());
             position.setCourse(buf.readUnsignedShortLE());
             position.setValid(buf.readUnsignedByte() > 0);

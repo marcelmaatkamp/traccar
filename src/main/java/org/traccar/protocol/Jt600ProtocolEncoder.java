@@ -15,11 +15,11 @@
  */
 package org.traccar.protocol;
 
-import java.util.TimeZone;
-
+import org.traccar.Protocol;
 import org.traccar.StringProtocolEncoder;
 import org.traccar.model.Command;
-import org.traccar.Protocol;
+
+import java.util.TimeZone;
 
 public class Jt600ProtocolEncoder extends StringProtocolEncoder {
 
@@ -30,19 +30,16 @@ public class Jt600ProtocolEncoder extends StringProtocolEncoder {
     @Override
     protected Object encodeCommand(Command command) {
 
-        switch (command.getType()) {
-            case Command.TYPE_ENGINE_STOP:
-                return "(S07,0)";
-            case Command.TYPE_ENGINE_RESUME:
-                return "(S07,1)";
-            case Command.TYPE_SET_TIMEZONE:
+        return switch (command.getType()) {
+            case Command.TYPE_ENGINE_STOP -> "(S07,0)";
+            case Command.TYPE_ENGINE_RESUME -> "(S07,1)";
+            case Command.TYPE_SET_TIMEZONE -> {
                 int offset = TimeZone.getTimeZone(command.getString(Command.KEY_TIMEZONE)).getRawOffset() / 60000;
-                return "(S09,1," + offset + ")";
-            case Command.TYPE_REBOOT_DEVICE:
-                return "(S17)";
-            default:
-                return null;
-        }
+                yield "(S09,1," + offset + ")";
+            }
+            case Command.TYPE_REBOOT_DEVICE -> "(S17)";
+            default -> null;
+        };
     }
 
 }

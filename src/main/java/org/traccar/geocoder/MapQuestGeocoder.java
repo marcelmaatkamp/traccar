@@ -16,8 +16,10 @@
  */
 package org.traccar.geocoder;
 
-import javax.json.JsonArray;
-import javax.json.JsonObject;
+import jakarta.json.JsonArray;
+import jakarta.json.JsonObject;
+import jakarta.ws.rs.client.Client;
+import java.util.Locale;
 
 public class MapQuestGeocoder extends JsonGeocoder {
 
@@ -29,8 +31,8 @@ public class MapQuestGeocoder extends JsonGeocoder {
         return url;
     }
 
-    public MapQuestGeocoder(String url, String key, int cacheSize, AddressFormat addressFormat) {
-        super(formatUrl(url, key), cacheSize, addressFormat);
+    public MapQuestGeocoder(Client client, String url, String key, int cacheSize, AddressFormat addressFormat) {
+        super(client, formatUrl(url, key), cacheSize, addressFormat);
     }
 
     @Override
@@ -56,7 +58,7 @@ public class MapQuestGeocoder extends JsonGeocoder {
                     address.setState(location.getString("adminArea3"));
                 }
                 if (location.containsKey("adminArea1")) {
-                    address.setCountry(location.getString("adminArea1").toUpperCase());
+                    address.setCountry(location.getString("adminArea1").toUpperCase(Locale.ROOT));
                 }
                 if (location.containsKey("postalCode")) {
                     address.setPostcode(location.getString("postalCode"));

@@ -18,11 +18,11 @@ package org.traccar.protocol;
 import io.netty.buffer.ByteBuf;
 import io.netty.channel.Channel;
 import org.traccar.BaseProtocolDecoder;
-import org.traccar.DeviceSession;
 import org.traccar.Protocol;
 import org.traccar.helper.BitUtil;
 import org.traccar.helper.UnitsConverter;
 import org.traccar.model.Position;
+import org.traccar.session.DeviceSession;
 
 import java.net.SocketAddress;
 import java.nio.charset.StandardCharsets;
@@ -58,18 +58,18 @@ public class AdmProtocolDecoder extends BaseProtocolDecoder {
             position.setValid(!BitUtil.check(status, 5));
             position.setLatitude(buf.readFloatLE());
             position.setLongitude(buf.readFloatLE());
-            position.setCourse(buf.readUnsignedShortLE() * 0.1);
-            position.setSpeed(UnitsConverter.knotsFromKph(buf.readUnsignedShortLE() * 0.1));
+            position.setCourse(buf.readUnsignedShortLE() / 10.0);
+            position.setSpeed(UnitsConverter.knotsFromKph(buf.readUnsignedShortLE() / 10.0));
 
-            position.set(Position.KEY_ACCELERATION, buf.readUnsignedByte() * 0.1);
+            position.set(Position.KEY_ACCELERATION, buf.readUnsignedByte() / 10.0);
             position.setAltitude(buf.readShortLE());
-            position.set(Position.KEY_HDOP, buf.readUnsignedByte() * 0.1);
+            position.set(Position.KEY_HDOP, buf.readUnsignedByte() / 10.0);
             position.set(Position.KEY_SATELLITES, buf.readUnsignedByte() & 0x0f);
 
             position.setTime(new Date(buf.readUnsignedIntLE() * 1000));
 
-            position.set(Position.KEY_POWER, buf.readUnsignedShortLE() * 0.001);
-            position.set(Position.KEY_BATTERY, buf.readUnsignedShortLE() * 0.001);
+            position.set(Position.KEY_POWER, buf.readUnsignedShortLE() / 1000.0);
+            position.set(Position.KEY_BATTERY, buf.readUnsignedShortLE() / 1000.0);
 
             if (BitUtil.check(type, 2)) {
                 buf.readUnsignedByte(); // vib
@@ -85,7 +85,7 @@ public class AdmProtocolDecoder extends BaseProtocolDecoder {
 
             if (BitUtil.check(type, 3)) {
                 for (int i = 1; i <= 6; i++) {
-                    position.set(Position.PREFIX_ADC + i, buf.readUnsignedShortLE() * 0.001);
+                    position.set(Position.PREFIX_ADC + i, buf.readUnsignedShortLE() / 1000.0);
                 }
             }
 
@@ -108,38 +108,19 @@ public class AdmProtocolDecoder extends BaseProtocolDecoder {
                 int endIndex = buf.readerIndex() + buf.readUnsignedByte();
                 while (buf.readerIndex() < endIndex) {
                     int mask = buf.readUnsignedByte();
-                    long value;
-                    switch (BitUtil.from(mask, 6)) {
-                        case 3:
-                            value = buf.readLongLE();
-                            break;
-                        case 2:
-                            value = buf.readUnsignedIntLE();
-                            break;
-                        case 1:
-                            value = buf.readUnsignedShortLE();
-                            break;
-                        default:
-                            value = buf.readUnsignedByte();
-                            break;
-                    }
+                    long value = switch (BitUtil.from(mask, 6)) {
+                        case 3 -> buf.readLongLE();
+                        case 2 -> buf.readUnsignedIntLE();
+                        case 1 -> buf.readUnsignedShortLE();
+                        default -> buf.readUnsignedByte();
+                    };
                     int index = BitUtil.to(mask, 6);
                     switch (index) {
-                        case 1:
-                            position.set(Position.PREFIX_TEMP + 1, value);
-                            break;
-                        case 2:
-                            position.set("humidity", value);
-                            break;
-                        case 3:
-                            position.set("illumination", value);
-                            break;
-                        case 4:
-                            position.set(Position.KEY_BATTERY, value);
-                            break;
-                        default:
-                            position.set("can" + index, value);
-                            break;
+                        case 1 -> position.set(Position.PREFIX_TEMP + 1, value);
+                        case 2 -> position.set(Position.KEY_HUMIDITY, value);
+                        case 3 -> position.set("illumination", value);
+                        case 4 -> position.set(Position.KEY_BATTERY, value);
+                        default -> position.set("can" + index, value);
                     }
                 }
             }

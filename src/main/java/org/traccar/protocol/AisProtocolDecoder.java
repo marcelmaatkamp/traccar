@@ -17,12 +17,12 @@ package org.traccar.protocol;
 
 import io.netty.channel.Channel;
 import org.traccar.BaseProtocolDecoder;
-import org.traccar.DeviceSession;
 import org.traccar.Protocol;
 import org.traccar.helper.BitBuffer;
 import org.traccar.helper.Parser;
 import org.traccar.helper.PatternBuilder;
 import org.traccar.model.Position;
+import org.traccar.session.DeviceSession;
 
 import java.net.SocketAddress;
 import java.nio.charset.StandardCharsets;
@@ -74,11 +74,11 @@ public class AisProtocolDecoder extends BaseProtocolDecoder {
                 position.set("turn", buf.readSigned(8));
             }
 
-            position.setSpeed(buf.readUnsigned(10) * 0.1);
+            position.setSpeed(buf.readUnsigned(10) / 10.0);
             position.setValid(buf.readUnsigned(1) != 0);
-            position.setLongitude(buf.readSigned(28) * 0.0001 / 60.0);
-            position.setLatitude(buf.readSigned(27) * 0.0001 / 60.0);
-            position.setCourse(buf.readUnsigned(12) * 0.1);
+            position.setLongitude(buf.readSigned(28) / 10000.0 / 60.0);
+            position.setLatitude(buf.readSigned(27) / 10000.0 / 60.0);
+            position.setCourse(buf.readUnsigned(12) / 10.0);
 
             position.set("heading", buf.readUnsigned(9));
 

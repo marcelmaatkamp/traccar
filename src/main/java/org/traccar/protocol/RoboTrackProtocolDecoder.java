@@ -19,7 +19,6 @@ import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
 import io.netty.channel.Channel;
 import org.traccar.BaseProtocolDecoder;
-import org.traccar.DeviceSession;
 import org.traccar.NetworkMessage;
 import org.traccar.Protocol;
 import org.traccar.helper.BitUtil;
@@ -27,6 +26,7 @@ import org.traccar.helper.UnitsConverter;
 import org.traccar.model.CellTower;
 import org.traccar.model.Network;
 import org.traccar.model.Position;
+import org.traccar.session.DeviceSession;
 
 import java.net.SocketAddress;
 import java.nio.charset.StandardCharsets;
@@ -84,8 +84,8 @@ public class RoboTrackProtocolDecoder extends BaseProtocolDecoder {
 
                 position.setValid(true);
                 position.setFixTime(position.getDeviceTime());
-                position.setLatitude(buf.readIntLE() * 0.000001);
-                position.setLongitude(buf.readIntLE() * 0.000001);
+                position.setLatitude(buf.readIntLE() / 1000000.0);
+                position.setLongitude(buf.readIntLE() / 1000000.0);
                 position.setSpeed(UnitsConverter.knotsFromKph(buf.readByte()));
 
             } else {

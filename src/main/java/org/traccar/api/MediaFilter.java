@@ -1,5 +1,5 @@
 /*
- * Copyright 2018 Anton Tananaev (anton@traccar.org)
+ * Copyright 2018 - 2026 Anton Tananaev (anton@traccar.org)
  * Copyright 2018 Andrey Kunitsyn (andrey@traccar.org)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -16,77 +16,80 @@
  */
 package org.traccar.api;
 
-import java.io.IOException;
-import java.sql.SQLException;
-
-import javax.servlet.Filter;
-import javax.servlet.FilterChain;
-import javax.servlet.FilterConfig;
-import javax.servlet.ServletException;
-import javax.servlet.ServletRequest;
-import javax.servlet.ServletResponse;
-import javax.servlet.http.HttpServletRequest;
-import javax.servlet.http.HttpServletResponse;
-import javax.servlet.http.HttpSession;
-
-import org.traccar.Context;
-import org.traccar.Main;
-import org.traccar.api.resource.SessionResource;
+import com.google.inject.Provider;
+import io.netty.handler.codec.http.HttpHeaderNames;
+import org.traccar.api.security.LoginResult;
+import org.traccar.api.security.LoginService;
+import org.traccar.api.security.PermissionsService;
 import org.traccar.database.StatisticsManager;
-import org.traccar.helper.Log;
 import org.traccar.model.Device;
+import org.traccar.storage.Storage;
+import org.traccar.storage.StorageException;
+import org.traccar.storage.query.Columns;
+import org.traccar.storage.query.Condition;
+import org.traccar.storage.query.Request;
 
+import jakarta.inject.Inject;
+import jakarta.inject.Singleton;
+import jakarta.servlet.Filter;
+import jakarta.servlet.FilterChain;
+import jakarta.servlet.ServletException;
+import jakarta.servlet.ServletRequest;
+import jakarta.servlet.ServletResponse;
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
+import java.io.IOException;
+
+@Singleton
 public class MediaFilter implements Filter {
 
-    @Override
-    public void init(FilterConfig filterConfig) throws ServletException {
+    private final Storage storage;
+    private final StatisticsManager statisticsManager;
+    private final LoginService loginService;
+    private final Provider<PermissionsService> permissionsServiceProvider;
+
+    @Inject
+    public MediaFilter(
+            Storage storage, StatisticsManager statisticsManager, LoginService loginService,
+            Provider<PermissionsService> permissionsServiceProvider) {
+        this.storage = storage;
+        this.statisticsManager = statisticsManager;
+        this.loginService = loginService;
+        this.permissionsServiceProvider = permissionsServiceProvider;
     }
 
     @Override
     public void doFilter(ServletRequest request, ServletResponse response, FilterChain chain)
             throws IOException, ServletException {
+
         HttpServletResponse httpResponse = (HttpServletResponse) response;
+        httpResponse.setHeader(HttpHeaderNames.CONTENT_SECURITY_POLICY.toString(), "sandbox");
         try {
-            HttpSession session = ((HttpServletRequest) request).getSession(false);
-            Long userId = null;
-            if (session != null) {
-                userId = (Long) session.getAttribute(SessionResource.USER_ID_KEY);
-                if (userId != null) {
-                    Context.getPermissionsManager().checkUserEnabled(userId);
-                    Main.getInjector().getInstance(StatisticsManager.class).registerRequest(userId);
-                }
-            }
-            if (userId == null) {
+            PermissionsService permissionsService = permissionsServiceProvider.get();
+            LoginResult loginResult = loginService.login((HttpServletRequest) request);
+            if (loginResult == null || loginResult.getUser() == null) {
                 httpResponse.sendError(HttpServletResponse.SC_UNAUTHORIZED);
                 return;
             }
+            long userId = loginResult.getUser().getId();
+            statisticsManager.registerRequest(userId);
 
             String path = ((HttpServletRequest) request).getPathInfo();
-            String[] parts = path.split("/");
-            if (parts.length < 2 || parts.length == 2 && !path.endsWith("/")) {
-                Context.getPermissionsManager().checkAdmin(userId);
-            } else {
-                Device device = Context.getDeviceManager().getByUniqueId(parts[1]);
+            String[] parts = path != null ? path.split("/") : null;
+            if (parts != null && parts.length >= 2) {
+                Device device = storage.getObject(Device.class, new Request(
+                        new Columns.All(), new Condition.Equals("uniqueId", parts[1])));
                 if (device != null) {
-                    Context.getPermissionsManager().checkDevice(userId, device.getId());
-                } else {
-                    httpResponse.sendError(HttpServletResponse.SC_NOT_FOUND);
+                    permissionsService.checkPermission(Device.class, userId, device.getId());
+                    chain.doFilter(request, response);
                     return;
                 }
             }
 
-            chain.doFilter(request, response);
-        } catch (SecurityException e) {
+            httpResponse.sendError(HttpServletResponse.SC_FORBIDDEN);
+        } catch (SecurityException | StorageException e) {
             httpResponse.setStatus(HttpServletResponse.SC_FORBIDDEN);
-            httpResponse.getWriter().println(Log.exceptionStack(e));
-        } catch (SQLException e) {
-            httpResponse.setStatus(HttpServletResponse.SC_BAD_REQUEST);
-            httpResponse.getWriter().println(Log.exceptionStack(e));
         }
-    }
-
-    @Override
-    public void destroy() {
     }
 
 }

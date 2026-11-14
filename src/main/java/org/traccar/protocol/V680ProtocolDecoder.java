@@ -17,12 +17,12 @@ package org.traccar.protocol;
 
 import io.netty.channel.Channel;
 import org.traccar.BaseProtocolDecoder;
-import org.traccar.DeviceSession;
 import org.traccar.Protocol;
 import org.traccar.helper.DateBuilder;
 import org.traccar.helper.Parser;
 import org.traccar.helper.PatternBuilder;
 import org.traccar.model.Position;
+import org.traccar.session.DeviceSession;
 
 import java.net.SocketAddress;
 import java.util.regex.Pattern;
@@ -97,11 +97,11 @@ public class V680ProtocolDecoder extends BaseProtocolDecoder {
             boolean south = parser.next().equals("S");
 
             if (lat > 90 || lon > 180) {
-                int lonDegrees = (int) (lon * 0.01);
+                int lonDegrees = (int) (lon / 100.0);
                 lon = (lon - lonDegrees * 100) / 60.0;
                 lon += lonDegrees;
 
-                int latDegrees = (int) (lat * 0.01);
+                int latDegrees = (int) (lat / 100.0);
                 lat = (lat - latDegrees * 100) / 60.0;
                 lat += latDegrees;
             }

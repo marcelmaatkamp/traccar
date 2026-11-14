@@ -17,14 +17,15 @@ package org.traccar.protocol;
 
 import io.netty.channel.Channel;
 import org.traccar.BaseProtocolDecoder;
-import org.traccar.DeviceSession;
 import org.traccar.Protocol;
 import org.traccar.helper.Parser;
 import org.traccar.helper.PatternBuilder;
 import org.traccar.helper.UnitsConverter;
 import org.traccar.model.Position;
+import org.traccar.session.DeviceSession;
 
 import java.net.SocketAddress;
+import java.util.Locale;
 import java.util.regex.Pattern;
 
 public class CguardProtocolDecoder extends BaseProtocolDecoder {
@@ -94,25 +95,17 @@ public class CguardProtocolDecoder extends BaseProtocolDecoder {
             String key = data[i * 2];
             String value = data[i * 2 + 1];
             switch (key) {
-                case "CSQ1":
-                    position.set(Position.KEY_RSSI, Integer.parseInt(value));
-                    break;
-                case "NSQ1":
-                    position.set(Position.KEY_SATELLITES, Integer.parseInt(value));
-                    break;
-                case "BAT1":
+                case "CSQ1" -> position.set(Position.KEY_RSSI, Integer.parseInt(value));
+                case "NSQ1" -> position.set(Position.KEY_SATELLITES, Integer.parseInt(value));
+                case "BAT1" -> {
                     if (value.contains(".")) {
                         position.set(Position.KEY_BATTERY, Double.parseDouble(value));
                     } else {
                         position.set(Position.KEY_BATTERY_LEVEL, Integer.parseInt(value));
                     }
-                    break;
-                case "PWR1":
-                    position.set(Position.KEY_POWER, Double.parseDouble(value));
-                    break;
-                default:
-                    position.set(key.toLowerCase(), value);
-                    break;
+                }
+                case "PWR1" -> position.set(Position.KEY_POWER, Double.parseDouble(value));
+                default -> position.set(key.toLowerCase(Locale.ROOT), value);
             }
         }
 

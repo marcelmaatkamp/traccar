@@ -19,12 +19,12 @@ import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
 import io.netty.channel.Channel;
 import org.traccar.BaseProtocolDecoder;
-import org.traccar.DeviceSession;
 import org.traccar.NetworkMessage;
 import org.traccar.Protocol;
 import org.traccar.helper.BitUtil;
 import org.traccar.helper.UnitsConverter;
 import org.traccar.model.Position;
+import org.traccar.session.DeviceSession;
 
 import java.net.SocketAddress;
 import java.nio.charset.StandardCharsets;
@@ -105,14 +105,14 @@ public class ObdDongleProtocolDecoder extends BaseProtocolDecoder {
 
             position.set(Position.KEY_SATELLITES, BitUtil.to(flags, 4));
 
-            double longitude = ((BitUtil.to(buf.readUnsignedShort(), 1) << 24) + buf.readUnsignedMedium()) * 0.00001;
+            double longitude = ((BitUtil.to(buf.readUnsignedShort(), 1) << 24) + buf.readUnsignedMedium()) / 100000.0;
             position.setLongitude(BitUtil.check(flags, 5) ? longitude : -longitude);
 
-            double latitude = buf.readUnsignedMedium() * 0.00001;
+            double latitude = buf.readUnsignedMedium() / 100000.0;
             position.setLatitude(BitUtil.check(flags, 4) ? latitude : -latitude);
 
             int speedCourse = buf.readUnsignedMedium();
-            position.setSpeed(UnitsConverter.knotsFromMph(BitUtil.from(speedCourse, 10) * 0.1));
+            position.setSpeed(UnitsConverter.knotsFromMph(BitUtil.from(speedCourse, 10) / 10.0));
             position.setCourse(BitUtil.to(speedCourse, 10));
 
             ByteBuf response = Unpooled.buffer();

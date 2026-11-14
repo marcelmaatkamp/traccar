@@ -18,12 +18,12 @@ package org.traccar.protocol;
 import io.netty.buffer.ByteBuf;
 import io.netty.channel.Channel;
 import org.traccar.BaseProtocolDecoder;
-import org.traccar.DeviceSession;
 import org.traccar.Protocol;
 import org.traccar.helper.DateBuilder;
 import org.traccar.helper.Parser;
 import org.traccar.helper.PatternBuilder;
 import org.traccar.model.Position;
+import org.traccar.session.DeviceSession;
 
 import java.net.SocketAddress;
 import java.nio.charset.StandardCharsets;
@@ -67,7 +67,7 @@ public class RitiProtocolDecoder extends BaseProtocolDecoder {
 
         position.set("mode", buf.readUnsignedByte());
         position.set(Position.KEY_COMMAND, buf.readUnsignedByte());
-        position.set(Position.KEY_POWER, buf.readUnsignedShortLE() * 0.001);
+        position.set(Position.KEY_POWER, buf.readUnsignedShortLE() / 1000.0);
 
         buf.skipBytes(5);  // status
         buf.readUnsignedShortLE();  // idleCount

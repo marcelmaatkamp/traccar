@@ -19,20 +19,24 @@ import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
 import io.netty.channel.Channel;
 import org.traccar.BaseProtocolDecoder;
-import org.traccar.DeviceSession;
 import org.traccar.NetworkMessage;
 import org.traccar.Protocol;
 import org.traccar.helper.BitUtil;
 import org.traccar.helper.DateBuilder;
+import org.traccar.helper.DateUtil;
 import org.traccar.helper.UnitsConverter;
 import org.traccar.model.Position;
+import org.traccar.session.DeviceSession;
 
 import java.net.SocketAddress;
 import java.nio.charset.StandardCharsets;
-import java.text.DateFormat;
-import java.text.SimpleDateFormat;
+import java.time.ZoneId;
+import java.time.format.DateTimeFormatter;
 
 public class NoranProtocolDecoder extends BaseProtocolDecoder {
+
+    private static final DateTimeFormatter DATE_FORMAT = DateTimeFormatter
+            .ofPattern("yy-MM-dd HH:mm:ss").withZone(ZoneId.systemDefault());
 
     public NoranProtocolDecoder(Protocol protocol) {
         super(protocol);
@@ -72,12 +76,9 @@ public class NoranProtocolDecoder extends BaseProtocolDecoder {
         } else if (type == MSG_UPLOAD_POSITION || type == MSG_UPLOAD_POSITION_NEW
                 || type == MSG_CONTROL_RESPONSE || type == MSG_ALARM) {
 
-            boolean newFormat = false;
-            if (type == MSG_UPLOAD_POSITION && buf.readableBytes() == 48
+            boolean newFormat = type == MSG_UPLOAD_POSITION && buf.readableBytes() == 48
                     || type == MSG_ALARM && buf.readableBytes() == 48
-                    || type == MSG_CONTROL_RESPONSE && buf.readableBytes() == 57) {
-                newFormat = true;
-            }
+                    || type == MSG_CONTROL_RESPONSE && buf.readableBytes() == 57;
 
             Position position = new Position(getProtocolName());
 
@@ -90,20 +91,10 @@ public class NoranProtocolDecoder extends BaseProtocolDecoder {
 
             short alarm = buf.readUnsignedByte();
             switch (alarm) {
-                case 1:
-                    position.set(Position.KEY_ALARM, Position.ALARM_SOS);
-                    break;
-                case 2:
-                    position.set(Position.KEY_ALARM, Position.ALARM_OVERSPEED);
-                    break;
-                case 3:
-                    position.set(Position.KEY_ALARM, Position.ALARM_GEOFENCE_EXIT);
-                    break;
-                case 9:
-                    position.set(Position.KEY_ALARM, Position.ALARM_POWER_OFF);
-                    break;
-                default:
-                    break;
+                case 1 -> position.addAlarm(Position.ALARM_SOS);
+                case 2 -> position.addAlarm(Position.ALARM_OVERSPEED);
+                case 3 -> position.addAlarm(Position.ALARM_GEOFENCE_EXIT);
+                case 9 -> position.addAlarm(Position.ALARM_POWER_OFF);
             }
 
             if (newFormat) {
@@ -142,14 +133,13 @@ public class NoranProtocolDecoder extends BaseProtocolDecoder {
             position.setDeviceId(deviceSession.getDeviceId());
 
             if (newFormat) {
-                DateFormat dateFormat = new SimpleDateFormat("yy-MM-dd HH:mm:ss");
-                position.setTime(dateFormat.parse(buf.readSlice(17).toString(StandardCharsets.US_ASCII)));
+                position.setTime(DateUtil.parse(DATE_FORMAT, buf.readSlice(17).toString(StandardCharsets.US_ASCII)));
                 buf.readByte();
             }
 
             if (!newFormat) {
                 position.set(Position.PREFIX_IO + 1, buf.readUnsignedByte());
-                position.set(Position.KEY_FUEL_LEVEL, buf.readUnsignedByte());
+                position.set(Position.KEY_FUEL, buf.readUnsignedByte());
             } else if (type == MSG_UPLOAD_POSITION_NEW) {
                 position.set(Position.PREFIX_TEMP + 1, buf.readShortLE());
                 position.set(Position.KEY_ODOMETER, buf.readFloatLE());

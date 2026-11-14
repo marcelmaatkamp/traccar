@@ -1,5 +1,5 @@
 /*
- * Copyright 2019 Anton Tananaev (anton@traccar.org)
+ * Copyright 2019 - 2021 Anton Tananaev (anton@traccar.org)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -17,13 +17,14 @@ package org.traccar.protocol;
 
 import io.netty.channel.Channel;
 import org.traccar.BaseProtocolDecoder;
-import org.traccar.DeviceSession;
+import org.traccar.NetworkMessage;
 import org.traccar.Protocol;
 import org.traccar.helper.BitUtil;
 import org.traccar.helper.Parser;
 import org.traccar.helper.PatternBuilder;
 import org.traccar.helper.UnitsConverter;
 import org.traccar.model.Position;
+import org.traccar.session.DeviceSession;
 
 import java.net.SocketAddress;
 import java.util.regex.Pattern;
@@ -75,6 +76,10 @@ public class PluginProtocolDecoder extends BaseProtocolDecoder {
     protected Object decode(
             Channel channel, SocketAddress remoteAddress, Object msg) throws Exception {
 
+        if (channel != null) {
+            channel.writeAndFlush(new NetworkMessage("$$hb,1#", remoteAddress));
+        }
+
         Parser parser = new Parser(PATTERN, (String) msg);
         if (!parser.matches()) {
             return null;
@@ -98,7 +103,7 @@ public class PluginProtocolDecoder extends BaseProtocolDecoder {
         position.set(Position.KEY_SATELLITES, parser.nextInt());
         position.set(Position.KEY_ODOMETER, (long) (parser.nextDouble() * 1000));
 
-        int status = parser.nextInt();
+        long status = parser.nextLong();
         position.setValid(BitUtil.check(status, 0));
         position.set(Position.KEY_IGNITION, BitUtil.check(status, 1));
         for (int i = 0; i < 4; i++) {
@@ -106,29 +111,22 @@ public class PluginProtocolDecoder extends BaseProtocolDecoder {
         }
         position.set(Position.KEY_STATUS, status);
 
-        position.set(Position.KEY_FUEL_LEVEL, parser.nextDouble());
+        position.set(Position.KEY_FUEL, parser.nextDouble());
 
         if (parser.hasNext(6)) {
             position.set(Position.PREFIX_TEMP + 1, parser.nextDouble());
             position.set(Position.PREFIX_TEMP + 2, parser.nextDouble());
             position.set(Position.KEY_RPM, parser.nextInt());
             position.set(Position.KEY_OBD_SPEED, parser.nextInt());
-            position.set(Position.KEY_THROTTLE, parser.nextInt() * 0.1);
-            position.set(Position.KEY_POWER, parser.nextInt() * 0.1);
+            position.set(Position.KEY_THROTTLE, parser.nextInt() / 10.0);
+            position.set(Position.KEY_POWER, parser.nextInt() / 10.0);
         }
 
         if (parser.hasNext()) {
             int event = parser.nextInt();
             switch (event) {
-                case 11317:
-                    position.set(Position.KEY_ALARM, Position.ALARM_ACCELERATION);
-                    break;
-                case 11319:
-                    position.set(Position.KEY_ALARM, Position.ALARM_BRAKING);
-                    break;
-                default:
-                    break;
-
+                case 11317 -> position.addAlarm(Position.ALARM_ACCELERATION);
+                case 11319 -> position.addAlarm(Position.ALARM_BRAKING);
             }
             position.set(Position.KEY_EVENT, event);
         }

@@ -19,12 +19,12 @@ import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
 import io.netty.channel.Channel;
 import org.traccar.BaseProtocolDecoder;
-import org.traccar.DeviceSession;
 import org.traccar.NetworkMessage;
 import org.traccar.Protocol;
 import org.traccar.helper.BitUtil;
 import org.traccar.helper.Checksum;
 import org.traccar.model.Position;
+import org.traccar.session.DeviceSession;
 
 import java.net.SocketAddress;
 import java.nio.charset.StandardCharsets;
@@ -45,14 +45,15 @@ public class GranitProtocolDecoder extends BaseProtocolDecoder {
         int checksum = Checksum.xor(buffer.nioBuffer(0, length)) & 0xFF;
         String checksumString = String.format("%02X", checksum);
         buffer.writeBytes(checksumString.getBytes(StandardCharsets.US_ASCII));
-        buffer.writeByte('\r'); buffer.writeByte('\n');
+        buffer.writeByte('\r');
+        buffer.writeByte('\n');
     }
 
     private static void sendResponseCurrent(Channel channel, int deviceId, long time) {
         ByteBuf response = Unpooled.buffer();
         response.writeBytes("BB+UGRC~".getBytes(StandardCharsets.US_ASCII));
         response.writeShortLE(6); // length
-        response.writeInt((int) time);
+        response.writeIntLE((int) time);
         response.writeShortLE(deviceId);
         appendChecksum(response, 16);
         channel.writeAndFlush(new NetworkMessage(response, channel.remoteAddress()));
@@ -72,7 +73,7 @@ public class GranitProtocolDecoder extends BaseProtocolDecoder {
         short flags = buf.readUnsignedByte();
         position.setValid(BitUtil.check(flags, 7));
         if (BitUtil.check(flags, 1)) {
-            position.set(Position.KEY_ALARM, Position.ALARM_GENERAL);
+            position.addAlarm(Position.ALARM_GENERAL);
         }
 
         short satDel = buf.readUnsignedByte();

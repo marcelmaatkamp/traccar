@@ -18,8 +18,8 @@ package org.traccar.protocol;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
 import org.traccar.BaseProtocolEncoder;
-import org.traccar.model.Command;
 import org.traccar.Protocol;
+import org.traccar.model.Command;
 
 public class CellocatorProtocolEncoder extends BaseProtocolEncoder {
 
@@ -69,14 +69,12 @@ public class CellocatorProtocolEncoder extends BaseProtocolEncoder {
     @Override
     protected Object encodeCommand(Command command) {
 
-        switch (command.getType()) {
-            case Command.TYPE_OUTPUT_CONTROL:
-                int data = Integer.parseInt(command.getString(Command.KEY_DATA)) << 4
-                        + command.getInteger(Command.KEY_INDEX);
-                return encodeCommand(command.getDeviceId(), 0x03, data, 0);
-            default:
-                return null;
+        if (command.getType().equals(Command.TYPE_OUTPUT_CONTROL)) {
+            int data = (Integer.parseInt(command.getString(Command.KEY_DATA)) << 4)
+                    + command.getInteger(Command.KEY_INDEX);
+            return encodeCommand(command.getDeviceId(), 0x03, data, 0);
         }
+        return null;
     }
 
 }
